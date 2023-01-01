@@ -3217,46 +3217,105 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 	int numCsr_20 = numCsr * 0.2;
 
 	// check all sensing data, 
+	
 	double PowerArray[numCsr][3] = {0};
-	int ind, tempA, tempB;
+	int ind;
+	int tempA, tempB;
+	int delta, offset, sf;
 	for (std::list<SensingData>::iterator sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); sensingIt++)
 	{
-
-		tempA = subframe.frameNo -  sensingIt->m_rxInfo.subframe.frameNo;
-		tempB = sensingIt->m_rxInfo.subframe.subframeNo - subframe.subframeNo;
-		if (std::abs(tempA) % 2)
-		{
-			ind = tempB + 10 ;
-		}
-		else
-		{
-			if (tempB > 0)
-				ind = tempB;
-			else
-				ind = tempB + 20;
-		}
-
-		NS_ASSERT((ind >=1) && (ind <= 20));
-
-		if (ind <= 3)
-			continue;
-		else
-			ind -= 3;
-
 		if (sensingIt->m_rxInfo.rbStart == 2)
 		{
+			tempA = subframe.frameNo -  sensingIt->m_rxInfo.subframe.frameNo;
+			tempB = sensingIt->m_rxInfo.subframe.subframeNo - subframe.subframeNo;
+			if (std::abs(tempA) % 2)
+			{
+				ind = tempB + 10 ;
+			}
+			else
+			{
+				if (tempB > 0)
+					ind = tempB;
+				else
+					ind = tempB + 20;
+			}
+
+			NS_ASSERT((ind >=1) && (ind <= 20));
+
+			if (ind <= 3)
+				continue;
+			else
+				ind -= 3;
+
+			// if (sensingIt->m_rxInfo.rbStart == 2)
+			// {
 			++PowerArray[ind*2 - 2][0];
 			PowerArray[ind*2 - 2][1] += sensingIt->m_slRsrp;
 			PowerArray[ind*2 - 2][2] += sensingIt->m_slRssi;
+			// }
+			// else
+			// {
+			// 	++PowerArray[ind*2 - 1][0];
+			// 	PowerArray[ind*2 - 1][1] += sensingIt->m_slRsrp;
+			// 	PowerArray[ind*2 - 1][2] += sensingIt->m_slRssi;
+			// }
 		}
 		else
 		{
-			++PowerArray[ind*2 - 1][0];
-			PowerArray[ind*2 - 1][1] += sensingIt->m_slRsrp;
-			PowerArray[ind*2 - 1][2] += sensingIt->m_slRssi;
+			delta = subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo;
+			delta = (delta<0)? (delta+1024) : delta;
+			offset = (delta%20) / 2;
+
+			if (delta%2)
+			{
+				sf = (sensingIt->m_rxInfo.subframe.subframeNo + offset + 1) % 10;
+				sf = sf ? sf : 10;
+				ind = 10 - subframe.subframeNo + sf;
+
+				if (ind > 3)
+				{
+					ind = (ind - 3) * 2 - 1;
+					++PowerArray[ind][0];
+					PowerArray[ind][1] += sensingIt->m_slRsrp;
+					PowerArray[ind][2] += sensingIt->m_slRssi;
+				}
+			}
+			else
+			{
+				sf = (sensingIt->m_rxInfo.subframe.subframeNo + offset) % 10;
+				sf = sf ? sf : 10;
+				if (sf > (int)subframe.subframeNo)
+				{
+					ind = sf - subframe.subframeNo;
+					if (ind > 3)
+					{
+						ind = (ind - 3) * 2 - 1;
+						++PowerArray[ind][0];
+						PowerArray[ind][1] += sensingIt->m_slRsrp;
+						PowerArray[ind][2] += sensingIt->m_slRssi;
+					}
+				}
+
+				sf = (sensingIt->m_rxInfo.subframe.subframeNo + offset + 1) % 10;
+				sf = sf ? sf : 10;
+				if (sf <= (int)subframe.subframeNo)
+				{
+					ind = 10 + (10 - subframe.subframeNo) + sf;
+					if (ind > 3)
+					{
+						ind = (ind - 3) * 2 - 1;
+						++PowerArray[ind][0];
+						PowerArray[ind][1] += sensingIt->m_slRsrp;
+						PowerArray[ind][2] += sensingIt->m_slRssi;
+					}
+				}
+
+			}
 		}
 
 	}
+
+
 	// calculate the average rsrp and rssi
 	for (int i = 0; i < numCsr; i++)
 	{
