@@ -1036,6 +1036,7 @@ struct StartRbSubchannel{
 struct NumSubchannel{
     enum{
       n1,
+      n2,
       n3,
       n5, 
       n8, 
@@ -1051,6 +1052,9 @@ struct NumSubchannel{
     switch (pNum.num) {
     case NumSubchannel::n1:
       num = 1;
+      break;
+    case NumSubchannel::n2:
+      num = 2;
       break;
     case NumSubchannel::n3:
       num = 3;
@@ -1085,6 +1089,9 @@ struct NumSubchannel{
     {
       case 1:
         numSubchannel.num = NumSubchannel::n1;
+        break;
+      case 2: 
+        numSubchannel.num = NumSubchannel::n2;
         break;
       case 3: 
         numSubchannel.num = NumSubchannel::n3;

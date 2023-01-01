@@ -39,6 +39,9 @@
 #include "ns3/ns2-mobility-helper.h"
 #include <cfloat>
 #include <sstream>
+#include <ctime>
+#include <iostream>
+
 
 using namespace ns3;
 
@@ -166,13 +169,17 @@ ReceivePacket(Ptr<Socket> socket)
 int 
 main (int argc, char *argv[])
 {
+
+    std::clock_t start, end;
+    start = std::clock();
+
     LogComponentEnable ("v2x_communication_mode_4", LOG_INFO);
 
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
 
-    uint16_t simTime = 100;                 // Simulation time in seconds
-    uint32_t numVeh = 100;                  // Number of vehicles
+    uint16_t simTime = 20;                 // Simulation time in seconds
+    uint32_t numVeh = 20;                  // Number of vehicles
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
     double ueTxPower = 23.0;                // Transmission power in dBm
     double probResourceKeep = 0.0;          // Probability to select the previous resource again [0.0-0.8]
@@ -181,11 +188,11 @@ main (int argc, char *argv[])
     bool adjacencyPscchPssch = true;        // Subchannelization scheme
     bool partialSensing = false;            // Partial sensing enabled (actual only partialSensing is false supported)
     uint16_t sizeSubchannel = 10;           // Number of RBs per subchannel
-    uint16_t numSubchannel = 3;             // Number of subchannels per subframe
+    uint16_t numSubchannel = 2;             // Number of subchannels per subframe
     uint16_t startRbSubchannel = 0;         // Index of first RB corresponding to subchannelization
-    uint16_t pRsvp = 100;				    // Resource reservation interval 
+    uint16_t pRsvp = 20;				    // Resource reservation interval 
     uint16_t t1 = 4;                        // T1 value of selection window
-    uint16_t t2 = 100;                      // T2 value of selection window
+    uint16_t t2 = 20;                      // T2 value of selection window
     uint16_t slBandwidth;                   // Sidelink bandwidth
     std::string tracefile;                  // Name of the tracefile 
 
@@ -528,5 +535,8 @@ main (int argc, char *argv[])
         Simulator::Destroy();
 
         NS_LOG_INFO("Simulation done.");
+
+        end = std::clock();
+        std::cout << (double)(end - start) / CLOCKS_PER_SEC << std::endl;
         return 0;  
 }   

@@ -43,7 +43,7 @@
 #include <ns3/boolean.h>
 #include <bitset>
 #include <algorithm>
-
+#include <cmath>
 
 #include "ns3/lte-rlc-tag.h"
 
@@ -3209,232 +3209,115 @@ std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo>
 LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, PoolInfoV2x pool)
 { 		
 	NS_LOG_INFO (this << "Start Resource Allocation - Semi Persistent Scheduling"); 
-	std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo> csrA, csrB, copyCsrA; 
-	std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo>::iterator csrIt;
-	std::list<CandidateResource>::iterator sortedCsrIt; 
-	std::list<SensingData>::iterator sensingIt;  
+	
+	std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo> csrA = 
+	pool.m_pool->GetCandidateResources(subframe, m_t1, m_t2, m_subchLen); 
 
-	uint16_t numCsr; // number of all Candidate Resources
-	int threshRsrp; 
-	bool erase; 
+	int numCsr = csrA.size();; // number of all Candidate Resources
+	int numCsr_20 = numCsr * 0.2;
 
-	if(m_partialSensing) 
-	{		
-		// Partial Sensing not implemented yet 
-	} // endif m_partialSensing
-	else  
-    {				
-		// init
-		csrA = pool.m_pool->GetCandidateResources(subframe, m_t1, m_t2, m_subchLen); // SA = {ALL CSRs}
-		numCsr = csrA.size();
-		copyCsrA = csrA; 
-		//std::cout << "---------------" << std::endl; 
+	// check all sensing data, 
+	double PowerArray[numCsr][3] = {0};
+	int ind, tempA, tempB;
+	for (std::list<SensingData>::iterator sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); sensingIt++)
+	{
 
-		//std::cout << subframe.frameNo << "/" << subframe.subframeNo <<"\t NumCsr=" << (int) csrA.size() << std::endl; 
-		threshRsrp = -110;
-
-		/*for (csrIt = csrA.begin(); csrIt != csrA.end(); ++csrIt)
+		tempA = subframe.frameNo -  sensingIt->m_rxInfo.subframe.frameNo;
+		tempB = sensingIt->m_rxInfo.subframe.subframeNo - subframe.subframeNo;
+		if (std::abs(tempA) % 2)
 		{
-			std::cout << " " << csrIt->subframe.frameNo << "/" << csrIt->subframe.subframeNo << "\t rbStart=" << (int) csrIt->rbStart << "\t rbLen=" << (int) csrIt->rbLen << std::endl; 
-		}*/
-
-		/*std::cout << "Sensed Data" << std::endl; 
-		for (sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); ++sensingIt)
+			ind = tempB + 10 ;
+		}
+		else
 		{
-			std::cout << " " << sensingIt->m_rxInfo.subframe.frameNo << "/" << sensingIt->m_rxInfo.subframe.subframeNo << "\t rbStart=" << (int) sensingIt->m_rxInfo.rbStart << "\t rbLen=" << (int) sensingIt->m_rxInfo.rbLen << std::endl; 
-		}*/
-
-		do
-		{	
-			csrA = copyCsrA; 	
-
-			// iterate over all Candidate Resources 	
-			csrIt = csrA.begin();	
-			while (csrIt != csrA.end())
-			{	
-				erase = false; 
-
-				// calculate all proposed transmissions of current candidate resource
-				SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo csrTransmission; 
-				csrTransmission.subframe.subframeNo = csrIt->subframe.subframeNo;
-				csrTransmission.rbStart = csrIt->rbStart;
-				csrTransmission.rbLen = csrIt->rbLen;
-
-				std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo> csrTx;
-				for (uint8_t ctr = 0; ctr < m_reselCtr; ctr++)
-				{
-					csrTransmission.subframe.frameNo = csrIt->subframe.frameNo + ctr*m_pRsvp/10;
-					if (csrTransmission.subframe.frameNo > 2048) {
-						csrTransmission.subframe.frameNo -= 2048; 
-					}
-					else if (csrTransmission.subframe.frameNo > 1024) {
-						csrTransmission.subframe.frameNo -= 1024; 
-					}
-					csrTx.push_back (csrTransmission);
-				}
-
-				// check all sensed data
-				for (sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); sensingIt++)
-				{	
-					// calculate all possible transmissions of sensed data
-					SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo sensTransmission;
-					sensTransmission.subframe.subframeNo = sensingIt->m_rxInfo.subframe.subframeNo; 
-					sensTransmission.rbStart = sensingIt->m_rxInfo.rbStart;
-					sensTransmission.rbLen = sensingIt->m_rxInfo.rbLen; 
-
-					std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo> sensTx; 
-					for(uint8_t ctr = 1; ctr <= 15; ctr++)
-					{
-						sensTransmission.subframe.frameNo = sensingIt->m_rxInfo.subframe.frameNo + ctr*sensingIt->m_pRsvpRx/10; 
-						if (sensTransmission.subframe.frameNo > 2048) {
-							sensTransmission.subframe.frameNo -= 2048; 
-						}
-						else if (sensTransmission.subframe.frameNo > 1024) {
-							sensTransmission.subframe.frameNo -= 1024; 
-						}
-						sensTx.push_back (sensTransmission); 
-					}
-
-					// for all proposed transmissions of current candidate resource
-					std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo>::iterator csrTxIt; 
-					for (csrTxIt = csrTx.begin(); csrTxIt != csrTx.end(); csrTxIt++)
-					{
-						NS_ASSERT (csrTxIt->subframe.frameNo > 0 && csrTxIt->subframe.frameNo <= 1024 && csrTxIt->subframe.subframeNo > 0 && csrTxIt->subframe.subframeNo <= 10);
-				
-						std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo>::iterator sensTxIt; 
-						for (sensTxIt = sensTx.begin(); sensTxIt != sensTx.end(); sensTxIt++)
-						{
-							// check if candidate resource transmission and possible transmission
-							// of sensed data occur in the same subframe
-							if(csrTxIt->subframe.frameNo == sensTxIt->subframe.frameNo && csrTxIt->subframe.subframeNo == sensTxIt->subframe.subframeNo)
-							{	
-								// check if the utilizied RBs overlaps with candidate resource RBs
-								for (int i = csrTxIt->rbStart; i < csrTxIt->rbStart+csrTxIt->rbLen; i++)
-								{
-									for(int j = sensTxIt->rbStart; j < sensTxIt->rbStart+sensTxIt->rbLen; j++)
-									{
-										if (i == j && sensingIt->m_slRsrp > threshRsrp) {
-											erase = true; 
-											break;
-										}	
-									}
-									if (erase) break;
-								}			
-							}
-							if (erase) break;
-						}
-					} // end for all proposed transmission of current candidate resource
-					if (erase) break;
-				} // end for all sensed data
-				if (erase) {
-					//std::cout << "erase \t" << csrIt->subframe.frameNo << "/" << csrIt->subframe.subframeNo << "\t rbStart=" << (int) csrIt->rbStart << "\t rbLen=" << (int) csrIt->rbLen << std::endl; 
-					csrIt = csrA.erase(csrIt);
-				}
-				else {
-					csrIt++; 
-				}	
-			} // end while
-			threshRsrp += 3; 
-		} // end do 
-		while(csrA.size() < 0.2*numCsr); // Step 7: Repeat until the size of the resulting CSR-list is greater than the 20% of the size of all CSR
-		
-		/*std::cout << "remaining csrs " << (int) csrA.size() << std::endl; 
-		for (csrIt = csrA.begin(); csrIt != csrA.end(); csrIt++)
-		{
-			std::cout << " " << csrIt->subframe.frameNo << "/" << csrIt->subframe.subframeNo << "\t rbStart=" << (int) csrIt->rbStart << "\t rbLen=" << (int) csrIt->rbLen << std::endl; 
-		}*/
-
-		// Step 8: Calculate metric E defined as the linear average of S-RSSI
-		std::list <CandidateResource> m_csr; 
-		for(csrIt = csrA.begin(); csrIt != csrA.end(); csrIt++) // for all remaining CSRs
-		{
-			double avg_rssi = 0; 
-			uint8_t nbTx = 0; 
-			
-			// Calculate the first transmission of current CSR frameNo/subframeNo in the sensing Window 
-			SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo sensingWindowTransmission; 
-			sensingWindowTransmission.subframe.subframeNo = csrIt->subframe.subframeNo;
-			sensingWindowTransmission.rbStart = csrIt->rbStart;
-			sensingWindowTransmission.rbLen = csrIt->rbLen;  
-
-			if (csrIt->subframe.frameNo <= 100) {
-				uint8_t diff = 100 - csrIt->subframe.frameNo; 
-				sensingWindowTransmission.subframe.frameNo = 1024 - diff; 
-			}
-			else {
-				sensingWindowTransmission.subframe.frameNo = csrIt->subframe.frameNo - 100;
-			}
-
-			// For the last 10 transmissions on CSR frameNo/subframeNo calculate
-			// the average S-RSSI 
-			for (uint8_t i = 0; i < 10; i++)
-			{
-				sensingWindowTransmission.subframe.frameNo +=  10; 
-				if(sensingWindowTransmission.subframe.frameNo > 1024) {
-					sensingWindowTransmission.subframe.frameNo -= 1024; 
-				} 
-				// check if we received data on the frameNo/subframeNo and same subchannel
-				for (sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); sensingIt++)
-				{
-					//if (sensingWindowTransmission.subframe.frameNo == sensingIt->m_rxInfo.subframe.frameNo && sensingWindowTransmission.subframe.subframeNo == sensingIt->m_rxInfo.subframe.subframeNo)
-					if (sensingWindowTransmission.subframe.frameNo == sensingIt->m_rxInfo.subframe.frameNo && sensingWindowTransmission.subframe.subframeNo == sensingIt->m_rxInfo.subframe.subframeNo && sensingWindowTransmission.rbStart == sensingIt->m_rxInfo.rbStart)
-					{
-						nbTx++;
-						avg_rssi += sensingIt->m_slRssi; 
-						break; // if we find frameNo/subframeNo we can skip to next transmission 
-					}
-				}
-			}
-
-			if(nbTx != 0) {
-				avg_rssi = avg_rssi / nbTx; 
-			}
-			else {
-				avg_rssi = -200.0; // assumend that nothing is received
-			}
-
-			CandidateResource csr; 
-			csr.m_txInfo = *csrIt;
-			csr.m_avg_rssi = avg_rssi; 			
-			m_csr.push_back(csr);
+			if (tempB > 0)
+				ind = tempB;
+			else
+				ind = tempB + 20;
 		}
 
-		// mix values in m_csr otherwise only the first resources in 
-		// selection window will be choosen 
-		std::list<CandidateResource> copy = m_csr; 
-		m_csr.clear(); 
+		NS_ASSERT((ind >=1) && (ind <= 20));
 
-		while (copy.size() != 0)
-		{	
-			std::list<CandidateResource>::iterator it = copy.begin(); 
-			std::advance(it, m_ueSelectedUniformVariable->GetInteger (0, copy.size()-1));
-			m_csr.push_back((*it)); 
-			copy.erase(it); 
+		if (ind <= 3)
+			continue;
+		else
+			ind -= 3;
+
+		if (sensingIt->m_rxInfo.rbStart == 2)
+		{
+			++PowerArray[ind*2 - 2][0];
+			PowerArray[ind*2 - 2][1] += sensingIt->m_slRsrp;
+			PowerArray[ind*2 - 2][2] += sensingIt->m_slRssi;
+		}
+		else
+		{
+			++PowerArray[ind*2 - 1][0];
+			PowerArray[ind*2 - 1][1] += sensingIt->m_slRsrp;
+			PowerArray[ind*2 - 1][2] += sensingIt->m_slRssi;
 		}
 
-		// Step 9: Select CSRs with smallest metric until the size of SB is greater than or equal to 20% of the size of all CSRs 
-		// sort by average RSSI
-		if (m_csr.size() != 0)
+	}
+	// calculate the average rsrp and rssi
+	for (int i = 0; i < numCsr; i++)
+	{
+		if (PowerArray[i][0])	
 		{
-			m_csr.sort([](const CandidateResource & a, const CandidateResource & b){return a.m_avg_rssi < b.m_avg_rssi;}); 
+			PowerArray[i][1] /= PowerArray[i][0];
+			PowerArray[i][2] /= PowerArray[i][0];
 		}
-		
-		for(sortedCsrIt = m_csr.begin(); sortedCsrIt != m_csr.end(); sortedCsrIt++)
+		else
 		{
-			if(csrB.size() >= 0.2*numCsr) {
-				break;
-			}
-			else {
-				csrB.push_back((sortedCsrIt->m_txInfo)); 
-			}
+			PowerArray[i][1] = -200.0;
+			PowerArray[i][2] = -200.0;
 		}
 	}
 
-	/*std::cout << "remaining csrs " << (int) csrB.size() << std::endl; 
-	for (csrIt = csrB.begin(); csrIt != csrB.end(); csrIt++)
+	// exclude until 20%
+	int surplus = 0;
+	double threshRsrp = -110-3;  
+	do{
+		threshRsrp += 3;
+		surplus = numCsr;
+		for (int i = 0; i < numCsr; i++)
+		{
+			if (!PowerArray[i][0])
+				continue;
+			if (PowerArray[i][1] >= threshRsrp)
+				surplus--;
+		}
+	}
+	while(surplus < numCsr_20);
+
+	// save 20+% csrA to candCsr
+	CandidateResource temp_candScr;
+	std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo>::iterator csrIt = csrA.begin();
+	std::list<CandidateResource> candCsr;
+	for (int i = 0; i < numCsr; i++, csrIt++)
 	{
-		std::cout << " " << csrIt->subframe.frameNo << "/" << csrIt->subframe.subframeNo << "\t rbStart=" << (int) csrIt->rbStart << "\t rbLen=" << (int) csrIt->rbLen << std::endl; 
-	}*/
+		if (PowerArray[i][1] < threshRsrp)
+		{
+			temp_candScr.m_txInfo = *csrIt;
+			temp_candScr.m_avg_rssi = PowerArray[i][2];
+			candCsr.push_back(temp_candScr);
+		}
+	} 
+
+	// NS_ASSERT(csrIt == csrA.end());
+
+	// if (threshRsrp >= -107.0)
+	// 	std::cout << candCsr.size() << std::endl;
+
+	// sort by average rssi
+	candCsr.sort([](const CandidateResource & a, const CandidateResource & b){return a.m_avg_rssi < b.m_avg_rssi;}); 
+
+	// get 20% of candCsr
+	std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo> csrB;
+	std::list<CandidateResource>::iterator sortedCsrIt = candCsr.begin(); 
+	for (int i = 0; i < numCsr_20; i++, sortedCsrIt++)
+	{
+		csrB.push_back(sortedCsrIt->m_txInfo);
+	}
+
 	return csrB; 
 }
 
@@ -3471,70 +3354,70 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 	NS_LOG_INFO (this << " Adjusted Frame no. " << frameNo << " subframe no. " << subframeNo);
 
 
-  //discovery
-  //Check if this is a new disc period
-  if (frameNo == m_discTxPools.m_nextDiscPeriod.frameNo && subframeNo == m_discTxPools.m_nextDiscPeriod.subframeNo)
-  {
-    //define periods and frames
-    m_discTxPools.m_currentDiscPeriod = m_discTxPools.m_nextDiscPeriod;
-    m_discTxPools.m_nextDiscPeriod = m_discTxPools.m_pool->GetNextDiscPeriod (frameNo, subframeNo);
-    m_discTxPools.m_nextDiscPeriod.frameNo++;
-    m_discTxPools.m_nextDiscPeriod.subframeNo++;
-    NS_LOG_INFO (this << " starting new discovery period " << ". Next period at " << m_discTxPools.m_nextDiscPeriod.frameNo << "/" << m_discTxPools.m_nextDiscPeriod.subframeNo);
-   
-    if (m_discTxPools.m_pool->GetSchedulingType() == SidelinkDiscResourcePool::UE_SELECTED) 
-    {
-        //use txProbability
-        DiscGrant grant;
-        double p1 = m_p1UniformVariable->GetValue (0, 1);
-        
-        double txProbability = m_discTxPools.m_pool->GetTxProbability (); //calculate txProbability
-        if (p1 <= txProbability/100)
-        {
-          grant.m_resPsdch = m_resUniformVariable->GetInteger (0, m_discTxPools.m_npsdch-1);
-          grant.m_rnti = m_rnti;
-          m_discTxPools.m_nextGrant = grant;
-          m_discTxPools.m_grant_received = true;
-          NS_LOG_INFO (this << " UE selected grant: resource=" << (uint16_t) grant.m_resPsdch << "/" << m_discTxPools.m_npsdch);
-        }
-    }
-    else //scheduled
-    {
-      //TODO
-      //use defined grant : SL-TF-IndexPair
-    } 
+	//discovery
+	//Check if this is a new disc period
+	if (frameNo == m_discTxPools.m_nextDiscPeriod.frameNo && subframeNo == m_discTxPools.m_nextDiscPeriod.subframeNo)
+	{
+	//define periods and frames
+	m_discTxPools.m_currentDiscPeriod = m_discTxPools.m_nextDiscPeriod;
+	m_discTxPools.m_nextDiscPeriod = m_discTxPools.m_pool->GetNextDiscPeriod (frameNo, subframeNo);
+	m_discTxPools.m_nextDiscPeriod.frameNo++;
+	m_discTxPools.m_nextDiscPeriod.subframeNo++;
+	NS_LOG_INFO (this << " starting new discovery period " << ". Next period at " << m_discTxPools.m_nextDiscPeriod.frameNo << "/" << m_discTxPools.m_nextDiscPeriod.subframeNo);
 
-    //if we received a grant
-    if (m_discTxPools.m_grant_received)
-    {
-      m_discTxPools.m_currentGrant = m_discTxPools.m_nextGrant;
-      NS_LOG_INFO (this << " Discovery grant received resource " << (uint32_t) m_discTxPools.m_currentGrant.m_resPsdch);  
+	if (m_discTxPools.m_pool->GetSchedulingType() == SidelinkDiscResourcePool::UE_SELECTED) 
+	{
+		//use txProbability
+		DiscGrant grant;
+		double p1 = m_p1UniformVariable->GetValue (0, 1);
+		
+		double txProbability = m_discTxPools.m_pool->GetTxProbability (); //calculate txProbability
+		if (p1 <= txProbability/100)
+		{
+			grant.m_resPsdch = m_resUniformVariable->GetInteger (0, m_discTxPools.m_npsdch-1);
+			grant.m_rnti = m_rnti;
+			m_discTxPools.m_nextGrant = grant;
+			m_discTxPools.m_grant_received = true;
+			NS_LOG_INFO (this << " UE selected grant: resource=" << (uint16_t) grant.m_resPsdch << "/" << m_discTxPools.m_npsdch);
+		}
+	}
+	else //scheduled
+	{
+		//TODO
+		//use defined grant : SL-TF-IndexPair
+	} 
 
-      SidelinkDiscResourcePool::SubframeInfo tmp;
-      tmp.frameNo = m_discTxPools.m_currentDiscPeriod.frameNo-1;
-      tmp.subframeNo = m_discTxPools.m_currentDiscPeriod.subframeNo-1;
-            
-      m_discTxPools.m_psdchTx = m_discTxPools.m_pool->GetPsdchTransmissions (m_discTxPools.m_currentGrant.m_resPsdch);
-      for (std::list<SidelinkDiscResourcePool::SidelinkTransmissionInfo>::iterator txIt = m_discTxPools.m_psdchTx.begin (); txIt != m_discTxPools.m_psdchTx.end (); txIt++)
-      {
-        txIt->subframe = txIt->subframe + tmp;
-        //adjust for index starting at 1
-        txIt->subframe.frameNo++;
-        txIt->subframe.subframeNo++;
-        NS_LOG_INFO (this << " PSDCH: Subframe " << txIt->subframe.frameNo << "/" << txIt->subframe.subframeNo << ": rbStart=" << (uint32_t) txIt->rbStart << ", rbLen=" << (uint32_t) txIt->nbRb);
-        //std::cout <<  " PSDCH: Subframe " << txIt->subframe.frameNo << "/" << txIt->subframe.subframeNo << ": rbStart=" << (uint32_t) txIt->rbStart << ", rbLen=" << (uint32_t) txIt->nbRb << std::endl;
-      }
-        
-      //Inform PHY: find a way to inform the PHY layer of the resources
-      m_cphySapProvider->SetDiscGrantInfo (m_discTxPools.m_currentGrant.m_resPsdch);   
-      //clear the grant
-      m_discTxPools.m_grant_received = false;
-    }
-  }
-  std::list<SidelinkDiscResourcePool::SidelinkTransmissionInfo>::iterator allocIt;
-  //check if we need to transmit PSDCH
-  allocIt = m_discTxPools.m_psdchTx.begin();
-  if (allocIt != m_discTxPools.m_psdchTx.end() && (*allocIt).subframe.frameNo == frameNo && (*allocIt).subframe.subframeNo == subframeNo)
+	//if we received a grant
+	if (m_discTxPools.m_grant_received)
+	{
+		m_discTxPools.m_currentGrant = m_discTxPools.m_nextGrant;
+		NS_LOG_INFO (this << " Discovery grant received resource " << (uint32_t) m_discTxPools.m_currentGrant.m_resPsdch);  
+
+		SidelinkDiscResourcePool::SubframeInfo tmp;
+		tmp.frameNo = m_discTxPools.m_currentDiscPeriod.frameNo-1;
+		tmp.subframeNo = m_discTxPools.m_currentDiscPeriod.subframeNo-1;
+			
+		m_discTxPools.m_psdchTx = m_discTxPools.m_pool->GetPsdchTransmissions (m_discTxPools.m_currentGrant.m_resPsdch);
+		for (std::list<SidelinkDiscResourcePool::SidelinkTransmissionInfo>::iterator txIt = m_discTxPools.m_psdchTx.begin (); txIt != m_discTxPools.m_psdchTx.end (); txIt++)
+		{
+		txIt->subframe = txIt->subframe + tmp;
+		//adjust for index starting at 1
+		txIt->subframe.frameNo++;
+		txIt->subframe.subframeNo++;
+		NS_LOG_INFO (this << " PSDCH: Subframe " << txIt->subframe.frameNo << "/" << txIt->subframe.subframeNo << ": rbStart=" << (uint32_t) txIt->rbStart << ", rbLen=" << (uint32_t) txIt->nbRb);
+		//std::cout <<  " PSDCH: Subframe " << txIt->subframe.frameNo << "/" << txIt->subframe.subframeNo << ": rbStart=" << (uint32_t) txIt->rbStart << ", rbLen=" << (uint32_t) txIt->nbRb << std::endl;
+		}
+		
+		//Inform PHY: find a way to inform the PHY layer of the resources
+		m_cphySapProvider->SetDiscGrantInfo (m_discTxPools.m_currentGrant.m_resPsdch);   
+		//clear the grant
+		m_discTxPools.m_grant_received = false;
+	}
+	}
+	std::list<SidelinkDiscResourcePool::SidelinkTransmissionInfo>::iterator allocIt;
+	//check if we need to transmit PSDCH
+	allocIt = m_discTxPools.m_psdchTx.begin();
+	if (allocIt != m_discTxPools.m_psdchTx.end() && (*allocIt).subframe.frameNo == frameNo && (*allocIt).subframe.subframeNo == subframeNo)
   {
     NS_LOG_INFO (this << "PSDCH transmission");
     for (std::list<uint32_t>::iterator txApp = m_discTxApps.begin (); txApp != m_discTxApps.end (); ++txApp)
@@ -3557,7 +3440,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
     m_discTxPools.m_psdchTx.erase (allocIt);
   } 
 
-  	//communication
+	//communication
 	if ((Simulator::Now () >= m_slBsrLast + m_slBsrPeriodicity) && (m_freshSlBsr == true))
 	{
 		SendSidelinkReportBufferStatusV2x ();
@@ -3663,21 +3546,21 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 					NS_LOG_INFO (this << " UE selected grant: resource=" << (uint16_t) grant.m_resPscch << "/" << poolIt->second.m_npscch << ", rbStart=" << (uint16_t) grant.m_rbStart << ", rbLen=" << (uint16_t) grant.m_rbLen << ", mcs=" << (uint16_t) grant.m_mcs << ", ch=" << subCh << ",itrp=" << (uint16_t) grant.m_trp);
 
 					/* // Trace SL UE mac scheduling
-		                SlUeMacStatParameters stats_params;
-		                stats_params.m_timestamp = Simulator::Now ().GetMilliSeconds ();
-		                stats_params.m_frameNo = frameNo;
-		                stats_params.m_subframeNo = subframeNo;
-		                stats_params.m_rnti = m_rnti;
-		                stats_params.m_mcs = grant.m_mcs;
-		                stats_params.m_pscchRi = grant.m_resPscch;
-		                stats_params.m_pscchTx1 = 1; //NEED to obtain SF of first Tx in PSCCH!!!!!!!!!!!!!!
-		                stats_params.m_pscchTx2 = 2; //NEED to obtain SF of second Tx in PSCCH!!!!!!!!!!!!!!
-		                stats_params.m_psschTxStartRB = grant.m_rbStart;
-		                stats_params.m_psschTxLengthRB = grant.m_rbLen;
-		                stats_params.m_psschItrp = grant.m_trp;
+						SlUeMacStatParameters stats_params;
+						stats_params.m_timestamp = Simulator::Now ().GetMilliSeconds ();
+						stats_params.m_frameNo = frameNo;
+						stats_params.m_subframeNo = subframeNo;
+						stats_params.m_rnti = m_rnti;
+						stats_params.m_mcs = grant.m_mcs;
+						stats_params.m_pscchRi = grant.m_resPscch;
+						stats_params.m_pscchTx1 = 1; //NEED to obtain SF of first Tx in PSCCH!!!!!!!!!!!!!!
+						stats_params.m_pscchTx2 = 2; //NEED to obtain SF of second Tx in PSCCH!!!!!!!!!!!!!!
+						stats_params.m_psschTxStartRB = grant.m_rbStart;
+						stats_params.m_psschTxLengthRB = grant.m_rbLen;
+						stats_params.m_psschItrp = grant.m_trp;
 
-		                m_slUeScheduling (stats_params);
-					 */
+						m_slUeScheduling (stats_params);
+						*/
 				}
 			}
 
@@ -4023,7 +3906,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 					// Walk through list until the random element is reached 
 					std::advance(txOppsIt, m_ueSelectedUniformVariable->GetInteger (0, txOpps.size()-1));
 					txInfo = *txOppsIt; 
-					//std::cout << "selected resource " << txInfo.subframe.frameNo << "/" << txInfo.subframe.subframeNo << "\t rbStart=" << (int) txInfo.rbStart << "\t rbLen=" << (int) txInfo.rbLen << std::endl; 
+					// std::cout << "selected resource " << txInfo.subframe.frameNo << "/" << txInfo.subframe.subframeNo << "\t rbStart=" << (int) txInfo.rbStart << "\t rbLen=" << (int) txInfo.rbLen << std::endl; 
 				}
 
 				if(m_v2xHarqEnabled)

@@ -428,7 +428,7 @@ private:
   uint8_t m_numSubchannel; ///< number of subchannels per subframe
   uint8_t m_startRbSubchannel; ///< resource block index where the subchannels begin
   uint16_t m_pRsvp; ///< Resource Reservation Interval in ms 
-  uint16_t rndmStart = (rand()%((3000+1)-2000))+2000; ///< counter for random start of resource allocation process
+  uint16_t rndmStart = (rand()%((1500+1)-0500))+0500; ///< counter for random start of resource allocation process
   bool firstTx = true; 
   
   std::list<SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo> txOpps; // list with all tx opportunities calculated by SPS 

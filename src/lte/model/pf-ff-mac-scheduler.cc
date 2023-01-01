@@ -1952,7 +1952,7 @@ PfFfMacScheduler::DoSchedUlTriggerReq (const struct FfMacSchedSapProvider::Sched
 
         for (itLogicalChannels = m_ueLogicalChannelsConfigList.begin (); itLogicalChannels != m_ueLogicalChannelsConfigList.end (); itLogicalChannels++)
          {
-           std::set <uint16_t>::iterator itRnti = rntiAllocated.find (itLogicalChannels->first.m_rnti);
+           //std::set <uint16_t>::iterator itRnti = rntiAllocated.find (itLogicalChannels->first.m_rnti);
            //std::cout<<" RNTI:"<<(int)itLogicalChannels->first.m_rnti<<" LCID:"<<(int)itLogicalChannels->second.m_logicalChannelIdentity<<" QCI:"<<(int)itLogicalChannels->second.m_qci<<std::endl;
           
            /********************** not allocate if MCS == 0 ******************************************************************* 
