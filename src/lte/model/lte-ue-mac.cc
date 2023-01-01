@@ -3272,7 +3272,7 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 		}
 	}
 
-	// exclude until 20%
+	// exclude until 20% (rsrp)
 	int surplus = 0;
 	double threshRsrp = -110-3;  
 	do{
