@@ -1008,23 +1008,43 @@ namespace ns3 {
       } // endif sfGap != 0
       else
       { 
-        // adjacent, no retransmission 
-        for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
+        if (first.rbStart == 0)
         {
-          first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
-          if (first.subframe.frameNo > 2048) 
+          // adjacent, no retransmission 
+          for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
           {
-            first.subframe.frameNo -= 2048; 
+            first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
+            if (first.subframe.frameNo > 2048) 
+            {
+              first.subframe.frameNo -= 2048; 
+            }
+            else if (first.subframe.frameNo > 1024) 
+            {
+              first.subframe.frameNo -= 1024; 
+            }
+            txInfo.push_back(first); 
           }
-          else if (first.subframe.frameNo > 1024) 
+        }
+        else
+        {
+          // adjacent, no retransmission 
+          for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
           {
-            first.subframe.frameNo -= 1024; 
-          }
-          txInfo.push_back(first); 
+            first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
+            if (first.subframe.frameNo > 2048) 
+            {
+              first.subframe.frameNo -= 2048; 
+            }
+            else if (first.subframe.frameNo > 1024) 
+            {
+              first.subframe.frameNo -= 1024; 
+            }
+            txInfo.push_back(first); 
 
-          first.subframe.subframeNo++;
-          if (first.subframe.subframeNo == 11)
-            first.subframe.subframeNo = 1;
+            first.subframe.subframeNo++;
+            if (first.subframe.subframeNo == 11)
+              first.subframe.subframeNo = 1;
+          }
         }
       }
     } // endif adjacency
@@ -1257,24 +1277,43 @@ namespace ns3 {
       } // endif sfGap != 0
       else
       {
-        // adjacent, no retransmission
-        for(uint8_t ctr = 0; ctr < reselCtr; ctr++)
+        if (first.rbStart == 2)
         {
-          first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
-          if (first.subframe.frameNo > 2048) 
+          // adjacent, no retransmission 
+          for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
           {
-            first.subframe.frameNo -= 2048; 
+            first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
+            if (first.subframe.frameNo > 2048) 
+            {
+              first.subframe.frameNo -= 2048; 
+            }
+            else if (first.subframe.frameNo > 1024) 
+            {
+              first.subframe.frameNo -= 1024; 
+            }
+            txInfo.push_back(first); 
           }
-          else if (first.subframe.frameNo > 1024) 
+        }
+        else
+        {
+          // adjacent, no retransmission 
+          for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
           {
-            first.subframe.frameNo -= 1024;
+            first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
+            if (first.subframe.frameNo > 2048) 
+            {
+              first.subframe.frameNo -= 2048; 
+            }
+            else if (first.subframe.frameNo > 1024) 
+            {
+              first.subframe.frameNo -= 1024; 
+            }
+            txInfo.push_back(first); 
+
+            first.subframe.subframeNo++;
+            if (first.subframe.subframeNo == 11)
+              first.subframe.subframeNo = 1;
           }
-
-          txInfo.push_back(first); 
-
-          first.subframe.subframeNo++;
-          if (first.subframe.subframeNo == 11)
-            first.subframe.subframeNo = 1;
         }
       }
     } // endif adjacenct

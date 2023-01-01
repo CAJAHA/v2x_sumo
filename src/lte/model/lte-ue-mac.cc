@@ -3242,14 +3242,13 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 
 			NS_ASSERT((ind >=1) && (ind <= 20));
 
-			if (ind <= 3)
-				continue;
-			else
-				ind -= 3;
-
-			++PowerArray[ind*2 - 2][0];
-			PowerArray[ind*2 - 2][1] += sensingIt->m_slRsrp;
-			PowerArray[ind*2 - 2][2] += sensingIt->m_slRssi;
+			if (ind > 3)
+			{
+				ind = (ind-3)*2-2;
+				++PowerArray[ind][0];
+				PowerArray[ind][1] += sensingIt->m_slRsrp;
+				PowerArray[ind][2] += sensingIt->m_slRssi;
+			}
 		}
 		else
 		{
@@ -3322,24 +3321,6 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 		}
 	}
 
-	// for (int i = 0; i < numCsr/2; i++)
-	// {
-	// 	if((PowerArray[i*2][0] == 0)&&(PowerArray[i*2+1][0] == 0))
-	// 		continue;
-
-	// 	if ((PowerArray[i*2][0]==0)&&(PowerArray[i*2+1][0]!=0))
-	// 	{
-	// 		PowerArray[i*2][0] = PowerArray[i*2+1][0];
-	// 		PowerArray[i*2][1] = PowerArray[i*2+1][1];
-	// 		PowerArray[i*2][2] = PowerArray[i*2+1][2];
-	// 	}
-	// 	else if ((PowerArray[i*2+1][0]==0)&&(PowerArray[i*2][0]!=0))
-	// 	{
-	// 		PowerArray[i*2+1][0] = PowerArray[i*2][0];
-	// 		PowerArray[i*2+1][1] = PowerArray[i*2][1];
-	// 		PowerArray[i*2+1][2] = PowerArray[i*2][2];	
-	// 	}
-	// }
 
 	// exclude until 20%
 	int surplus = 0;
