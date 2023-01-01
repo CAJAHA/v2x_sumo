@@ -1021,6 +1021,10 @@ namespace ns3 {
             first.subframe.frameNo -= 1024; 
           }
           txInfo.push_back(first); 
+
+          first.subframe.subframeNo++;
+          if (first.subframe.subframeNo == 11)
+            first.subframe.subframeNo = 1;
         }
       }
     } // endif adjacency
@@ -1267,6 +1271,10 @@ namespace ns3 {
           }
 
           txInfo.push_back(first); 
+
+          first.subframe.subframeNo++;
+          if (first.subframe.subframeNo == 11)
+            first.subframe.subframeNo = 1;
         }
       }
     } // endif adjacenct
