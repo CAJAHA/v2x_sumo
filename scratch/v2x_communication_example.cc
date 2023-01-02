@@ -186,7 +186,7 @@ main (int argc, char *argv[])
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
 
     uint16_t simTime = 10;                 // Simulation time in seconds
-    uint32_t numVeh = 20;                  // Number of vehicles
+    uint32_t numVeh = 12;                  // Number of vehicles
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
     double ueTxPower = 23.0;                // Transmission power in dBm
     double probResourceKeep = 0.0;          // Probability to select the previous resource again [0.0-0.8]
