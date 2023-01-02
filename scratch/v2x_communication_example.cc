@@ -49,15 +49,16 @@ NS_LOG_COMPONENT_DEFINE ("v2x_communication_mode_4");
 
 // Output 
 std::string rx_data = "log_rx_data_v2x.csv";
-
 Ptr<OutputStreamWrapper> log_rx_data;
 
+std::string dist_data = "log_dist.csv";
+Ptr<OutputStreamWrapper> log_dist_data;
 
 // Global variables
 uint32_t ctr_totRx = 0; 	// Counter for total received packets
 uint32_t ctr_totTx = 0; 	// Counter for total transmitted packets
 uint16_t lenCam;  
-double baseline= 150.0;     // Baseline distance in meter (150m for urban, 320m for freeway)
+double baseline= 100.0;     // Baseline distance in meter (150m for urban, 320m for freeway)
 
 // Responders users 
 NodeContainer ueVeh;
@@ -82,6 +83,35 @@ PrintStatus (uint32_t s_period)
 	// *log_simtime->GetStream() << Simulator::Now ().GetSeconds () << ";" << ctr_totRx << ";" << ctr_totTx << ";" << (double) ctr_totRx / ctr_totTx << std::endl; 
     std::cout << "t=" <<  Simulator::Now().GetSeconds() << "\t Rx/Tx="<< ctr_totRx << "/" << ctr_totTx << "\t PRR=" << (double) ctr_totRx / ctr_totTx << std::endl;
     Simulator::Schedule(Seconds(s_period), &PrintStatus, s_period);
+}
+
+void 
+SaveDistance ()
+{
+    uint64_t simTime = Simulator::Now().GetMilliSeconds();
+    *log_dist_data->GetStream() << simTime;
+
+    NodeContainer::Iterator NodeItr1, NodeItr2;
+    Ptr<MobilityModel> MobPtr1, MobPtr2;
+    Vector v1, v2;
+    double distance;
+    double threshold = pow(baseline, 2);
+    for (NodeItr1 = ueVeh.Begin(); NodeItr1 != ueVeh.End(); NodeItr1++)
+    {
+        MobPtr1 = (*NodeItr1)->GetObject<MobilityModel>(); 
+        v1 = MobPtr1->GetPosition();
+        for (NodeItr2 = (NodeItr1+1); NodeItr2 != ueVeh.End(); NodeItr2++)
+        {
+            MobPtr2 = (*NodeItr2)->GetObject<MobilityModel>(); 
+            v2 = MobPtr2->GetPosition();
+            distance = pow(v1.x-v2.x, 2) + pow(v1.y-v2.y, 2);
+            if (distance > threshold)
+                *log_dist_data->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+        }
+    }
+    *log_dist_data->GetStream() << "\n";
+
+    Simulator::Schedule(MilliSeconds(1), &SaveDistance);
 }
 
 void
@@ -133,13 +163,13 @@ ReceivePacket(Ptr<Socket> socket)
     Ptr<Packet> packet = socket->Recv (); 
     packet->CopyData((uint8_t*)&msg, sizeof(SendMsg));
 
-    *log_rx_data->GetStream() << msg.m_genTime << " " << msg.m_ID << " " << rxTime << " " << rxID << "\n";
-
     double distance = sqrt(pow((msg.m_xPos - posRx.x),2.0)+pow((msg.m_yPos - posRx.y), 2.0));
     if (distance <= baseline)
     {         
         ctr_totRx++; 
     }
+    
+    *log_rx_data->GetStream() << msg.m_genTime << " " << msg.m_ID << " " << rxTime << " " << rxID << " " << distance << "\n";
 
 }
 
@@ -192,6 +222,7 @@ main (int argc, char *argv[])
 
     AsciiTraceHelper ascii;
     log_rx_data = ascii.CreateFileStream(rx_data);
+    log_dist_data = ascii.CreateFileStream(dist_data);
 
     NS_LOG_INFO ("Starting network configuration..."); 
 
@@ -450,7 +481,6 @@ main (int argc, char *argv[])
 
         // Print Configuration
         *log_rx_data->GetStream() << "RxPackets;RxTime;RxId;TxId;TxTime;xPos;yPos" << std::endl;
-        // *log_tx_data->GetStream() << "TxPackets;TxTime;TxId;xPos;yPos" << std::endl;
 
         NS_LOG_INFO ("Installing Sidelink Configuration...");
         lteHelper->InstallSidelinkV2xConfiguration (ueRespondersDevs, ueSidelinkConfiguration);
@@ -460,6 +490,7 @@ main (int argc, char *argv[])
 
         // *log_simtime->GetStream() << "Simtime;TotalRx;TotalTx;PRR" << std::endl; 
         Simulator::Schedule(Seconds(1), &PrintStatus, 1);
+        Simulator::Schedule(Seconds(1.0), &SaveDistance);
 
         NS_LOG_INFO ("Starting Simulation...");
         Simulator::Stop(MilliSeconds(simTime*1000+40));
