@@ -60,8 +60,13 @@ uint32_t ctr_totTx = 0; 	// Counter for total transmitted packets
 uint16_t lenCam;  
 double baseline= 100.0;     // Baseline distance in meter (150m for urban, 320m for freeway)
 
+uint32_t numVeh;
+uint32_t infVeh;
+
 // Responders users 
 NodeContainer ueVeh;
+// NodeContainer infVeh;
+// NodeContainer allVeh;
 
 
 struct SendMsg
@@ -131,7 +136,7 @@ SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
     };
 
     // check for each UE distance to transmitter
-    for (uint8_t i=0; i<ueVeh.GetN();i++)
+    for (uint8_t i=0; i< numVeh;i++)
     {
         Ptr<MobilityModel> mob = ueVeh.Get(i)->GetObject<MobilityModel>(); 
         Vector posRx = mob->GetPosition();
@@ -185,8 +190,9 @@ main (int argc, char *argv[])
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
 
-    uint16_t simTime = 10;                 // Simulation time in seconds
-    uint32_t numVeh = 12;                  // Number of vehicles
+    uint16_t simTime = 20;                 // Simulation time in seconds
+    numVeh = 12;                  // Number of vehicles
+    infVeh =5;
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
     double ueTxPower = 23.0;                // Transmission power in dBm
     double probResourceKeep = 0.0;          // Probability to select the previous resource again [0.0-0.8]
@@ -206,6 +212,7 @@ main (int argc, char *argv[])
     CommandLine cmd;
     cmd.AddValue ("time", "Simulation Time", simTime);
     cmd.AddValue ("numVeh", "Number of Vehicles", numVeh);
+    cmd.AddValue ("infVeh", "Number of Inf Vehicles", infVeh);
     cmd.AddValue ("adjacencyPscchPssch", "Scheme for subchannelization", adjacencyPscchPssch); 
     cmd.AddValue ("sizeSubchannel", "Number of RBs per Subchannel", sizeSubchannel);
     cmd.AddValue ("numSubchannel", "Number of Subchannels", numSubchannel);
@@ -259,20 +266,23 @@ main (int argc, char *argv[])
     Config::SetDefault ("ns3::LteUeMac::SlProbResourceKeep", DoubleValue(probResourceKeep));
     Config::SetDefault ("ns3::LteUeMac::SelectionWindowT1", UintegerValue(t1));
     Config::SetDefault ("ns3::LteUeMac::SelectionWindowT2", UintegerValue(t2));
+    Config::SetDefault ("ns3::LteEnbNetDevice::UlEarfcn", StringValue ("54990"));
 
 
     ConfigStore inputConfig; 
     inputConfig.ConfigureDefaults(); 
 
     // Create node container to hold all UEs 
-    NodeContainer ueAllNodes; 
+    // NodeContainer ueAllNodes; 
 
     NS_LOG_INFO ("Installing Mobility Model...");
 
 
     // Create nodes
-    ueVeh.Create (numVeh);
-    ueAllNodes.Add (ueVeh);
+    ueVeh.Create (numVeh + infVeh);
+    // infVeh.Create (10);
+    // allVeh.Add(ueVeh);
+    // allVeh.Add(infVeh);
 
     // Install constant random positions 
     MobilityHelper mobVeh;
@@ -295,28 +305,19 @@ main (int argc, char *argv[])
     NS_LOG_INFO ("Creating helpers...");
     // EPC
     Ptr<PointToPointEpcHelper> epcHelper = CreateObject<PointToPointEpcHelper>();
-    Ptr<Node> pgw = epcHelper->GetPgwNode();
 
     // LTE Helper
     Ptr<LteHelper> lteHelper = CreateObject<LteHelper>();
     lteHelper->SetEpcHelper(epcHelper);
     lteHelper->DisableNewEnbPhy(); // Disable eNBs for out-of-coverage modelling
+    lteHelper->SetEnbAntennaModelType ("ns3::NistParabolic3dAntennaModel");
+    lteHelper->SetAttribute ("UseSameUlDlPropagationCondition", BooleanValue(true));
+    lteHelper->SetAttribute ("PathlossModel", StringValue ("ns3::CniUrbanmicrocellPropagationLossModel"));
     
-    // V2X 
+    // V2X Helper
     Ptr<LteV2xHelper> lteV2xHelper = CreateObject<LteV2xHelper> ();
     lteV2xHelper->SetLteHelper (lteHelper); 
 
-    // Configure eNBs' antenna parameters before deploying them.
-    lteHelper->SetEnbAntennaModelType ("ns3::NistParabolic3dAntennaModel");
-
-    // Set pathloss model
-    // FIXME: InstallEnbDevice overrides PathlossModel Frequency with values from Earfcn
-    lteHelper->SetAttribute ("UseSameUlDlPropagationCondition", BooleanValue(true));
-    Config::SetDefault ("ns3::LteEnbNetDevice::UlEarfcn", StringValue ("54990"));
-    //Config::SetDefault ("ns3::CniUrbanmicrocellPropagationLossModel::Frequency", DoubleValue(5800e6));
-    lteHelper->SetAttribute ("PathlossModel", StringValue ("ns3::CniUrbanmicrocellPropagationLossModel"));
-
-    
     // Create eNB Container
     NodeContainer eNodeB;
     eNodeB.Create(1); 
@@ -324,32 +325,28 @@ main (int argc, char *argv[])
     // Topology eNodeB
     Ptr<ListPositionAllocator> pos_eNB = CreateObject<ListPositionAllocator>(); 
     pos_eNB->Add(Vector(5,-10,30));
-
-    //  Install mobility eNodeB
     MobilityHelper mob_eNB;
     mob_eNB.SetMobilityModel("ns3::ConstantPositionMobilityModel");
     mob_eNB.SetPositionAllocator(pos_eNB);
     mob_eNB.Install(eNodeB);
 
     // Install Service
-    NetDeviceContainer enbDevs = lteHelper->InstallEnbDevice(eNodeB);
+    lteHelper->InstallEnbDevice(eNodeB);
 
     // Required to use NIST 3GPP model
     BuildingsHelper::Install (eNodeB);
-    BuildingsHelper::Install (ueAllNodes);
+    BuildingsHelper::Install (ueVeh);
     BuildingsHelper::MakeMobilityModelConsistent (); 
 
     // Install LTE devices to all UEs 
     NS_LOG_INFO ("Installing UE's network devices...");
     lteHelper->SetAttribute("UseSidelink", BooleanValue (true));
-    NetDeviceContainer ueRespondersDevs = lteHelper->InstallUeDevice (ueVeh);
-    NetDeviceContainer ueDevs;
-    ueDevs.Add (ueRespondersDevs); 
+    NetDeviceContainer ueDevs = lteHelper->InstallUeDevice (ueVeh);
 
     // Install the IP stack on the UEs
     NS_LOG_INFO ("Installing IP stack..."); 
     InternetStackHelper internet;
-    internet.Install (ueAllNodes); 
+    internet.Install (ueVeh); 
 
     // Assign IP adress to UEs
     NS_LOG_INFO ("Allocating IP addresses and setting up network route...");
@@ -357,9 +354,9 @@ main (int argc, char *argv[])
     ueIpIface = epcHelper->AssignUeIpv4Address (ueDevs);
     Ipv4StaticRoutingHelper Ipv4RoutingHelper;
 
-    for(uint32_t u = 0; u < ueAllNodes.GetN(); ++u)
+    for(uint32_t u = 0; u < ueVeh.GetN(); ++u)
     {
-        Ptr<Node> ueNode = ueAllNodes.Get(u);
+        Ptr<Node> ueNode = ueVeh.Get(u);
         // Set the default gateway for the UE
         Ptr<Ipv4StaticRouting> ueStaticRouting = Ipv4RoutingHelper.GetStaticRouting(ueNode->GetObject<Ipv4>());
         ueStaticRouting->SetDefaultRoute (epcHelper->GetUeDefaultGatewayAddress(), 1);
@@ -371,86 +368,56 @@ main (int argc, char *argv[])
 
     NS_LOG_INFO ("Creating sidelink groups...");
     std::vector<NetDeviceContainer> txGroups;
-    txGroups = lteV2xHelper->AssociateForV2xBroadcast(ueRespondersDevs, numVeh); 
-
+    txGroups = lteV2xHelper->AssociateForV2xBroadcast(ueDevs, numVeh+infVeh); 
     lteV2xHelper->PrintGroups(txGroups); 
-    // compute average number of receivers associated per transmitter and vice versa
-    double totalRxs = 0;
-    std::map<uint32_t, uint32_t> txPerUeMap;
-    std::map<uint32_t, uint32_t> groupsPerUe;
-
-    std::vector<NetDeviceContainer>::iterator gIt;
-    for(gIt=txGroups.begin(); gIt != txGroups.end(); gIt++)
-    {
-        uint32_t numDevs = gIt->GetN();
-
-        totalRxs += numDevs-1;
-        uint32_t nId;
-
-        for(uint32_t i=1; i< numDevs; i++)
-        {
-            nId = gIt->Get(i)->GetNode()->GetId();
-            txPerUeMap[nId]++;
-        }
-    }
-
-    double totalTxPerUe = 0; 
-    std::map<uint32_t, uint32_t>::iterator mIt;
-    for(mIt=txPerUeMap.begin(); mIt != txPerUeMap.end(); mIt++)
-    {
-        totalTxPerUe += mIt->second;
-        groupsPerUe [mIt->second]++;
-    }
-
-    // lteV2xHelper->PrintGroups (txGroups, log_connections);
 
     NS_LOG_INFO ("Installing applications...");
-    
     // Application Setup for Responders
     std::vector<uint32_t> groupL2Addresses; 
     uint32_t groupL2Address = 0x00; 
     Ipv4AddressGenerator::Init(Ipv4Address ("225.0.0.0"), Ipv4Mask("255.0.0.0"));
     Ipv4Address clientRespondersAddress = Ipv4AddressGenerator::NextAddress (Ipv4Mask ("255.0.0.0"));
-
     uint16_t application_port = 8000; // Application port to TX/RX
-    NetDeviceContainer activeTxUes;
+
+    for(std::vector<NetDeviceContainer>::iterator gIt=txGroups.begin(); gIt != txGroups.end(); gIt++)
+    {
+        // Create Sidelink bearers
+        // Use Tx for the group transmitter and Rx for all the receivers
+        // Split Tx/Rx
+
+        NetDeviceContainer txUe ((*gIt).Get(0));
+        NetDeviceContainer rxUes = lteV2xHelper->RemoveNetDevice ((*gIt), txUe.Get (0));
+
+        uint32_t vehID = txUe.Get(0)->GetNode()->GetId();
+
+        Ptr<LteSlTft> tft = Create<LteSlTft> (LteSlTft::TRANSMIT, clientRespondersAddress, groupL2Address);
+        lteV2xHelper->ActivateSidelinkBearer (Seconds(0.0), txUe, tft);
+        tft = Create<LteSlTft> (LteSlTft::RECEIVE, clientRespondersAddress, groupL2Address);
+        lteV2xHelper->ActivateSidelinkBearer (Seconds(0.0), rxUes, tft);
+
+        //Individual Socket Traffic Broadcast everyone
+        Ptr<Socket> host = Socket::CreateSocket(txUe.Get(0)->GetNode(),TypeId::LookupByName ("ns3::UdpSocketFactory"));
+        host->Bind();
+        host->Connect(InetSocketAddress(clientRespondersAddress,application_port));
+        host->SetAllowBroadcast(true);
+        host->ShutdownRecv();
 
 
 
-    for(gIt=txGroups.begin(); gIt != txGroups.end(); gIt++)
-        {
-            // Create Sidelink bearers
-            // Use Tx for the group transmitter and Rx for all the receivers
-            // Split Tx/Rx
-
-            NetDeviceContainer txUe ((*gIt).Get(0));
-            activeTxUes.Add(txUe);
-            NetDeviceContainer rxUes = lteV2xHelper->RemoveNetDevice ((*gIt), txUe.Get (0));
-            Ptr<LteSlTft> tft = Create<LteSlTft> (LteSlTft::TRANSMIT, clientRespondersAddress, groupL2Address);
-            lteV2xHelper->ActivateSidelinkBearer (Seconds(0.0), txUe, tft);
-            tft = Create<LteSlTft> (LteSlTft::RECEIVE, clientRespondersAddress, groupL2Address);
-            lteV2xHelper->ActivateSidelinkBearer (Seconds(0.0), rxUes, tft);
-
-            //Individual Socket Traffic Broadcast everyone
-            Ptr<Socket> host = Socket::CreateSocket(txUe.Get(0)->GetNode(),TypeId::LookupByName ("ns3::UdpSocketFactory"));
-            host->Bind();
-            host->Connect(InetSocketAddress(clientRespondersAddress,application_port));
-            host->SetAllowBroadcast(true);
-            host->ShutdownRecv();
-
-            Ptr<LteUeMac> ueMac = DynamicCast<LteUeMac>( txUe.Get (0)->GetObject<LteUeNetDevice> ()->GetMac () );
+        Ptr<LteUeMac> ueMac = DynamicCast<LteUeMac>( txUe.Get (0)->GetObject<LteUeNetDevice> ()->GetMac () );
+        if (vehID < numVeh)
             ueMac->TraceConnectWithoutContext ("SidelinkV2xAnnouncement", MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace, host));
-            //ueMac->TraceConnect ("SidelinkV2xAnnouncement", oss.str() ,MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace, stream2));
 
-            Ptr<Socket> sink = Socket::CreateSocket(txUe.Get(0)->GetNode(),TypeId::LookupByName ("ns3::UdpSocketFactory"));
-            sink->Bind(InetSocketAddress (Ipv4Address::GetAny (), application_port));
+        Ptr<Socket> sink = Socket::CreateSocket(txUe.Get(0)->GetNode(),TypeId::LookupByName ("ns3::UdpSocketFactory"));
+        sink->Bind(InetSocketAddress (Ipv4Address::GetAny (), application_port));
+        if (vehID < numVeh)
             sink->SetRecvCallback (MakeCallback (&ReceivePacket));
 
-            //store and increment addresses
-            groupL2Addresses.push_back (groupL2Address);
-            groupL2Address++;
-            clientRespondersAddress = Ipv4AddressGenerator::NextAddress (Ipv4Mask ("255.0.0.0"));
-        }
+        //store and increment addresses
+        groupL2Addresses.push_back (groupL2Address);
+        groupL2Address++;
+        clientRespondersAddress = Ipv4AddressGenerator::NextAddress (Ipv4Mask ("255.0.0.0"));
+    }
 
         NS_LOG_INFO ("Creating Sidelink Configuration...");
         Ptr<LteUeRrcSl> ueSidelinkConfiguration = CreateObject<LteUeRrcSl>();
@@ -483,7 +450,7 @@ main (int argc, char *argv[])
         *log_rx_data->GetStream() << "RxPackets;RxTime;RxId;TxId;TxTime;xPos;yPos" << std::endl;
 
         NS_LOG_INFO ("Installing Sidelink Configuration...");
-        lteHelper->InstallSidelinkV2xConfiguration (ueRespondersDevs, ueSidelinkConfiguration);
+        lteHelper->InstallSidelinkV2xConfiguration (ueDevs, ueSidelinkConfiguration);
 
         NS_LOG_INFO ("Enabling LTE traces...");
         lteHelper->EnableTraces();
