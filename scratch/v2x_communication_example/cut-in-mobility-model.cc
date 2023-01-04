@@ -126,25 +126,25 @@ CutInMobilityModel::GetInitPosition (CutInMobilityModel::TrafficLevel level, Cut
 
 void CutInMobilityModel::PrintPositionError(ns3::Ptr<ns3::OutputStreamWrapper> log_stream)
 {
+    *log_stream->GetStream() << "Position Error (50m) : " << std::endl;
+    for (int i = 0; i < 5; i++)
+    {
+        double th = 1.0;
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << " " << PositionErrorValue[1][i] 
+        << " " << PositionError[1][i] << " " << PositionErrorCount[1] << std::endl;
+    }
     *log_stream->GetStream() << "Position Error (100m) : " << std::endl;
     for (int i = 0; i < 5; i++)
     {
         double th = 1.0;
-        *log_stream->GetStream() << "TH = " << th+i*1.0 << PositionErrorValue[1][i] 
-        << " " << PositionError[1][i] << " " << PositionErrorCount[1] << std::endl;
-    }
-    *log_stream->GetStream() << "Position Error (150m) : " << std::endl;
-    for (int i = 0; i < 5; i++)
-    {
-        double th = 1.0;
-        *log_stream->GetStream() << "TH = " << th+i*1.0 << PositionErrorValue[2][i] 
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << " " << PositionErrorValue[2][i] 
         << " " << PositionError[2][i] << " " << PositionErrorCount[2] << std::endl;
     }
     *log_stream->GetStream() << "Position Error (200m) : " << std::endl;
     for (int i = 0; i < 5; i++)
     {
         double th = 1.0;
-        *log_stream->GetStream() << "TH = " << th+i*1.0 << PositionErrorValue[2][i] 
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << " " << PositionErrorValue[2][i] 
         << " " << PositionError[2][i] << " " << PositionErrorCount[2] << std::endl;
     }
 
@@ -355,12 +355,12 @@ CutInMobilityModel::CalculatePositionError()
         switch (int(distance/50.0))
         {
         case 0:
-        case 1:
             ind1 = 0;
             break;
-        case 2:
+        case 1:
             ind1 = 1;
             break;
+        case 2:
         case 3:
             ind1 = 2;
             break;
@@ -375,15 +375,19 @@ CutInMobilityModel::CalculatePositionError()
                 ind2 = 0;
                 break;
             case 2:
+            case 3:
                 ind2 = 1;
                 break;
-            case 3:
+            case 4:
+            case 5:
                 ind2 = 2;
                 break;
-            case 4:
+            case 6:
+            case 7:
                 ind2 = 3;
                 break;
-            case 5:
+            case 8:
+            case 9:
                 ind2 = 4;
                 break;
             default:
