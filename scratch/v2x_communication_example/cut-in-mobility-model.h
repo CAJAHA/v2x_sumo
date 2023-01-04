@@ -90,8 +90,9 @@ private:
 
     
     static std::list<CutInMobilityModel*> CutInMobilityModels;
-    static double PositionError[3];
+    static int PositionError[3][5];
     static int PositionErrorCount[3];
+    static double PositionErrorValue[3][5];
 };
 
 } // namespace ns3
