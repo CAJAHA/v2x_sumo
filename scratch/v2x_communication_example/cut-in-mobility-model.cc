@@ -130,15 +130,15 @@ void CutInMobilityModel::PrintPositionError(ns3::Ptr<ns3::OutputStreamWrapper> l
     for (int i = 0; i < 5; i++)
     {
         double th = 1.0;
-        *log_stream->GetStream() << "TH = " << th+i*1.0 << " " << PositionErrorValue[1][i] 
-        << " " << PositionError[1][i] << " " << PositionErrorCount[1] << std::endl;
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << " " << PositionErrorValue[0][i] 
+        << " " << PositionError[0][i] << " " << PositionErrorCount[0] << std::endl;
     }
     *log_stream->GetStream() << "Position Error (100m) : " << std::endl;
     for (int i = 0; i < 5; i++)
     {
         double th = 1.0;
-        *log_stream->GetStream() << "TH = " << th+i*1.0 << " " << PositionErrorValue[2][i] 
-        << " " << PositionError[2][i] << " " << PositionErrorCount[2] << std::endl;
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << " " << PositionErrorValue[1][i] 
+        << " " << PositionError[1][i] << " " << PositionErrorCount[1] << std::endl;
     }
     *log_stream->GetStream() << "Position Error (200m) : " << std::endl;
     for (int i = 0; i < 5; i++)
