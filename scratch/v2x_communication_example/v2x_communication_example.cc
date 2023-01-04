@@ -54,9 +54,11 @@ std::string rx_data = "_rxdata.csv";
 Ptr<OutputStreamWrapper> log_rx_data;
 
 std::string dist_data = "_dist.csv";
-Ptr<OutputStreamWrapper> log_dist_data;
+Ptr<OutputStreamWrapper> log_dist_data_100m;
+Ptr<OutputStreamWrapper> log_dist_data_150m;
+Ptr<OutputStreamWrapper> log_dist_data_200m;
 
-std::string average_pos_err = "_position_error";
+std::string average_pos_err = "_position_error.csv";
 Ptr<OutputStreamWrapper> log_poisition_error;
 
 // Global variables
@@ -70,6 +72,7 @@ uint32_t numVeh;
 
 // Responders users 
 NodeContainer ueVeh;
+NodeContainer vVeh;
 // NodeContainer infVeh;
 // NodeContainer allVeh;
 
@@ -99,27 +102,44 @@ void
 SaveDistance ()
 {
     uint64_t simTime = Simulator::Now().GetMilliSeconds();
-    *log_dist_data->GetStream() << simTime;
+    *log_dist_data_100m->GetStream() << simTime;
+    *log_dist_data_150m->GetStream() << simTime;
+    *log_dist_data_200m->GetStream() << simTime;
 
     NodeContainer::Iterator NodeItr1, NodeItr2;
     Ptr<MobilityModel> MobPtr1, MobPtr2;
     Vector v1, v2;
     double distance;
-    double threshold = pow(baseline, 2);
-    for (NodeItr1 = ueVeh.Begin(); NodeItr1 != ueVeh.End(); NodeItr1++)
+    double threshold_100 = pow(100.0, 2);
+    double threshold_150 = pow(150.0, 2);
+    double threshold_200 = pow(200.0, 2);
+    for (NodeItr1 = vVeh.Begin(); NodeItr1 != vVeh.End(); NodeItr1++)
     {
         MobPtr1 = (*NodeItr1)->GetObject<MobilityModel>(); 
         v1 = MobPtr1->GetPosition();
-        for (NodeItr2 = (NodeItr1+1); NodeItr2 != ueVeh.End(); NodeItr2++)
+        for (NodeItr2 = (NodeItr1+1); NodeItr2 != vVeh.End(); NodeItr2++)
         {
             MobPtr2 = (*NodeItr2)->GetObject<MobilityModel>(); 
             v2 = MobPtr2->GetPosition();
             distance = pow(v1.x-v2.x, 2) + pow(v1.y-v2.y, 2);
-            if (distance > threshold)
-                *log_dist_data->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+            if (distance > threshold_200)
+            {
+                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+                *log_dist_data_150m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+                *log_dist_data_200m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+            }
+            else if (distance > threshold_150)
+            {
+                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+                *log_dist_data_150m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+            }
+            else if (distance > threshold_100)
+                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">";             
         }
     }
-    *log_dist_data->GetStream() << "\n";
+    *log_dist_data_100m->GetStream() << "\n";
+    *log_dist_data_150m->GetStream() << "\n";
+    *log_dist_data_200m->GetStream() << "\n";
 
     Simulator::Schedule(MilliSeconds(1), &SaveDistance);
 }
@@ -216,7 +236,7 @@ main (int argc, char *argv[])
     uint16_t t1 = 4;                        // T1 value of selection window
     uint16_t t2 = 20;                      // T2 value of selection window
     uint16_t slBandwidth;                   // Sidelink bandwidth
-    CutInMobilityModel::TrafficLevel level = CutInMobilityModel::TrafficLevel::L2;
+    CutInMobilityModel::TrafficLevel level = CutInMobilityModel::TrafficLevel::L3;
 
     // Command line arguments
     CommandLine cmd;
@@ -243,8 +263,14 @@ main (int argc, char *argv[])
     AsciiTraceHelper ascii;
     rx_data = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + rx_data;
     log_rx_data = ascii.CreateFileStream(rx_data);
-    dist_data = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + dist_data;
-    log_dist_data = ascii.CreateFileStream(dist_data);
+    
+    std::string dist_data_100m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_100_" + dist_data;
+    std::string dist_data_150m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_150_" + dist_data;
+    std::string dist_data_200m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_200_" + dist_data;
+    log_dist_data_100m = ascii.CreateFileStream(dist_data_100m);
+    log_dist_data_150m = ascii.CreateFileStream(dist_data_150m);
+    log_dist_data_200m = ascii.CreateFileStream(dist_data_200m);
+    
     average_pos_err = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + average_pos_err;
     log_poisition_error = ascii.CreateFileStream(average_pos_err);
 
@@ -328,6 +354,8 @@ main (int argc, char *argv[])
         mobVeh.SetPositionAllocator(staticVeh[i]);
         mobVeh.Install(ueVeh.Get(i));
 
+        vVeh.Add(ueVeh.Get(i));
+
         Ptr<CutInMobilityModel> cimm = ueVeh.Get(i)->GetObject<CutInMobilityModel>();
         cimm->ScheduleToStart(i, 5000, level, CutInMobilityModel::BelongTo::MAIN_ROAD);
     }
@@ -339,6 +367,8 @@ main (int argc, char *argv[])
         staticVeh[i]->Add(Vector(posItr->m_x, posItr->m_y, 1.5)); 
         mobVeh.SetPositionAllocator(staticVeh[i]);
         mobVeh.Install(ueVeh.Get(i));
+
+        vVeh.Add(ueVeh.Get(i));
 
         Ptr<CutInMobilityModel> cimm = ueVeh.Get(i)->GetObject<CutInMobilityModel>();
         cimm->ScheduleToStart(i, 5000, level, CutInMobilityModel::BelongTo::MERGE_ROAD);

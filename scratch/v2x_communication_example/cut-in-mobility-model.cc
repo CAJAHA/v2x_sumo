@@ -8,8 +8,9 @@ NS_OBJECT_ENSURE_REGISTERED (CutInMobilityModel);
 
 
 std::list<CutInMobilityModel*> CutInMobilityModel::CutInMobilityModels;
-double CutInMobilityModel::PositionError[3];
-int CutInMobilityModel::PositionErrorCount[3];
+int CutInMobilityModel::PositionError[3][5] = {0};
+int CutInMobilityModel::PositionErrorCount[3] = {0};
+double CutInMobilityModel::PositionErrorValue[3][5] = {0};
 
 double CutInMobilityModel::SQRT3 = 1.7320508075688772;
 double CutInMobilityModel::SQRT3_2 = 1.7320508075688772 / 2;
@@ -125,25 +126,29 @@ CutInMobilityModel::GetInitPosition (CutInMobilityModel::TrafficLevel level, Cut
 
 void CutInMobilityModel::PrintPositionError(ns3::Ptr<ns3::OutputStreamWrapper> log_stream)
 {
-    std::cout << "Position Error (100m) : " 
-    << CutInMobilityModel::PositionError[0] / CutInMobilityModel::PositionErrorCount[0] 
-    << " " << CutInMobilityModel::PositionErrorCount[0] << std::endl;
-    std::cout << "Position Error (150m) : " 
-    << CutInMobilityModel::PositionError[1] / CutInMobilityModel::PositionErrorCount[1] 
-    << " " << CutInMobilityModel::PositionErrorCount[1] << std::endl;
-    std::cout << "Position Error (200m) : " 
-    << CutInMobilityModel::PositionError[2] / CutInMobilityModel::PositionErrorCount[2] 
-    << " " << CutInMobilityModel::PositionErrorCount[2] << std::endl;
+    *log_stream->GetStream() << "Position Error (100m) : " << std::endl;
+    for (int i = 0; i < 5; i++)
+    {
+        double th = 1.0;
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << PositionErrorValue[1][i] 
+        << " " << PositionError[1][i] << " " << PositionErrorCount[1] << std::endl;
+    }
+    *log_stream->GetStream() << "Position Error (150m) : " << std::endl;
+    for (int i = 0; i < 5; i++)
+    {
+        double th = 1.0;
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << PositionErrorValue[2][i] 
+        << " " << PositionError[2][i] << " " << PositionErrorCount[2] << std::endl;
+    }
+    *log_stream->GetStream() << "Position Error (200m) : " << std::endl;
+    for (int i = 0; i < 5; i++)
+    {
+        double th = 1.0;
+        *log_stream->GetStream() << "TH = " << th+i*1.0 << PositionErrorValue[2][i] 
+        << " " << PositionError[2][i] << " " << PositionErrorCount[2] << std::endl;
+    }
 
-    *log_stream->GetStream() << "Position Error (100m) : " 
-    << CutInMobilityModel::PositionError[0] / CutInMobilityModel::PositionErrorCount[0] 
-    << " " << CutInMobilityModel::PositionErrorCount[0] << std::endl;
-    *log_stream->GetStream() << "Position Error (150m) : " 
-    << CutInMobilityModel::PositionError[1] / CutInMobilityModel::PositionErrorCount[1] 
-    << " " << CutInMobilityModel::PositionErrorCount[1] << std::endl;
-    *log_stream->GetStream() << "Position Error (200m) : " 
-    << CutInMobilityModel::PositionError[2] / CutInMobilityModel::PositionErrorCount[2] 
-    << " " << CutInMobilityModel::PositionErrorCount[2] << std::endl;
+
 
 }
 
@@ -346,26 +351,54 @@ CutInMobilityModel::CalculatePositionError()
 
         // std::cout << m_ID << "  " << error << " " << m_vehstates[(*ptr)->m_ID].m_genTime << std::endl;
 
-        if (distance < 100)
+        int ind1, ind2;
+        switch (int(distance/50.0))
         {
-            PositionError[0] += error;
-            PositionError[1] += error;
-            PositionError[2] += error;
-            PositionErrorCount[0]++;
-            PositionErrorCount[1]++;
-            PositionErrorCount[2]++;
+        case 0:
+        case 1:
+            ind1 = 0;
+            break;
+        case 2:
+            ind1 = 1;
+            break;
+        case 3:
+            ind1 = 2;
+            break;
+        default:
+            ind1 = 3;
+            break;
         }
-        else if(distance < 150)
+        switch ( int(error / 0.5) )
         {
-            PositionError[1] += error;
-            PositionError[2] += error;
-            PositionErrorCount[1]++;
-            PositionErrorCount[2]++;
+            case 0:
+            case 1:
+                ind2 = 0;
+                break;
+            case 2:
+                ind2 = 1;
+                break;
+            case 3:
+                ind2 = 2;
+                break;
+            case 4:
+                ind2 = 3;
+                break;
+            case 5:
+                ind2 = 4;
+                break;
+            default:
+                ind2 = 5;
+                break;
         }
-        else if (distance < 200)
+
+        for (int i = ind1; i < 3; i++)
         {
-            PositionError[2] += error;
-            PositionErrorCount[2]++;
+            PositionErrorCount[i]++;
+            for (int j = 0; j < ind2; j++)
+            {
+                PositionError[i][j]++;
+                PositionErrorValue[i][j] += error;
+            }
         }
     }
 }
