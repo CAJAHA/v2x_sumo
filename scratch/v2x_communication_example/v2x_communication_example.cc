@@ -54,8 +54,8 @@ std::string rx_data = "_rxdata.csv";
 Ptr<OutputStreamWrapper> log_rx_data;
 
 std::string dist_data = "_dist.csv";
+Ptr<OutputStreamWrapper> log_dist_data_50m;
 Ptr<OutputStreamWrapper> log_dist_data_100m;
-Ptr<OutputStreamWrapper> log_dist_data_150m;
 Ptr<OutputStreamWrapper> log_dist_data_200m;
 
 std::string average_pos_err = "_position_error.csv";
@@ -102,16 +102,16 @@ void
 SaveDistance ()
 {
     uint64_t simTime = Simulator::Now().GetMilliSeconds();
+    *log_dist_data_50m->GetStream() << simTime;
     *log_dist_data_100m->GetStream() << simTime;
-    *log_dist_data_150m->GetStream() << simTime;
     *log_dist_data_200m->GetStream() << simTime;
 
     NodeContainer::Iterator NodeItr1, NodeItr2;
     Ptr<MobilityModel> MobPtr1, MobPtr2;
     Vector v1, v2;
     double distance;
+    double threshold_50 = pow(50.0, 2);
     double threshold_100 = pow(100.0, 2);
-    double threshold_150 = pow(150.0, 2);
     double threshold_200 = pow(200.0, 2);
     for (NodeItr1 = vVeh.Begin(); NodeItr1 != vVeh.End(); NodeItr1++)
     {
@@ -124,21 +124,21 @@ SaveDistance ()
             distance = pow(v1.x-v2.x, 2) + pow(v1.y-v2.y, 2);
             if (distance > threshold_200)
             {
+                *log_dist_data_50m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
                 *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-                *log_dist_data_150m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
                 *log_dist_data_200m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
             }
-            else if (distance > threshold_150)
-            {
-                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-                *log_dist_data_150m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-            }
             else if (distance > threshold_100)
-                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">";             
+            {
+                *log_dist_data_50m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
+            }
+            else if (distance > threshold_50)
+                *log_dist_data_50m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">";             
         }
     }
+    *log_dist_data_50m->GetStream() << "\n";
     *log_dist_data_100m->GetStream() << "\n";
-    *log_dist_data_150m->GetStream() << "\n";
     *log_dist_data_200m->GetStream() << "\n";
 
     Simulator::Schedule(MilliSeconds(1), &SaveDistance);
@@ -264,11 +264,11 @@ main (int argc, char *argv[])
     rx_data = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + rx_data;
     log_rx_data = ascii.CreateFileStream(rx_data);
     
+    std::string dist_data_50m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_50_" + dist_data;
     std::string dist_data_100m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_100_" + dist_data;
-    std::string dist_data_150m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_150_" + dist_data;
     std::string dist_data_200m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_200_" + dist_data;
+    log_dist_data_50m = ascii.CreateFileStream(dist_data_50m);
     log_dist_data_100m = ascii.CreateFileStream(dist_data_100m);
-    log_dist_data_150m = ascii.CreateFileStream(dist_data_150m);
     log_dist_data_200m = ascii.CreateFileStream(dist_data_200m);
     
     average_pos_err = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + average_pos_err;
