@@ -1,44 +1,13 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
-/*
-  This software was developed at the National Institute of Standards and
-  Technology by employees of the Federal Government in the course of
-  their official duties. Pursuant to titleElement 17 Section 105 of the United
-  States Code this software is not subject to copyright protection and
-  is in the public domain.
-  NIST assumes no responsibility whatsoever for its use by other parties,
-  and makes no guarantees, expressed or implied, about its quality,
-  reliability, or any other characteristic.
-
-  We would appreciate acknowledgement if the software is used.
-
-  NIST ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" CONDITION AND
-  DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
-  FROM THE USE OF THIS SOFTWARE.
-
- * Modified by: Fabian Eckermann <fabian.eckermann@udo.edu> (CNI)
- *              Moritz Kahlert <moritz.kahlert@udo.edu> (CNI)
- */
-
-#include "ns3/lte-helper.h"
-#include "ns3/core-module.h"
-#include "ns3/network-module.h"
-#include "ns3/ipv4-global-routing-helper.h"
+#include "ns3/simulator.h"
 #include "ns3/internet-module.h"
-#include "ns3/mobility-module.h"
+#include "ns3/random-direction-2d-mobility-model.h"
+#include "ns3/mobility-helper.h"
 #include "ns3/lte-module.h"
-#include "ns3/applications-module.h"
-#include "ns3/point-to-point-helper.h"
-#include "ns3/lte-v2x-helper.h"
 #include "ns3/config-store.h"
-#include "ns3/lte-hex-grid-enb-topology-helper.h"
-#include <ns3/buildings-helper.h>
-#include <ns3/cni-urbanmicrocell-propagation-loss-model.h>
-#include <ns3/constant-position-mobility-model.h>
-#include <ns3/spectrum-analyzer-helper.h>
-#include <ns3/multi-model-spectrum-channel.h>
-#include "ns3/ns2-mobility-helper.h"
+#include "ns3/command-line.h"
 #include "cut-in-mobility-model.h"
 #include "ns3/rng-seed-manager.h"
+#include "ns3/position-allocator.h"
 #include <cfloat>
 #include <sstream>
 #include <ctime>
@@ -53,37 +22,27 @@ NS_LOG_COMPONENT_DEFINE ("v2x_communication_mode_4");
 std::string rx_data = "_rxdata.csv";
 Ptr<OutputStreamWrapper> log_rx_data;
 
-std::string dist_data = "_dist.csv";
-Ptr<OutputStreamWrapper> log_dist_data_50m;
-Ptr<OutputStreamWrapper> log_dist_data_100m;
-Ptr<OutputStreamWrapper> log_dist_data_200m;
-
-std::string average_pos_err = "_position_error.csv";
-Ptr<OutputStreamWrapper> log_poisition_error;
-
 // Global variables
 uint32_t ctr_totRx = 0; 	// Counter for total received packets
 uint32_t ctr_totTx = 0; 	// Counter for total transmitted packets
 uint16_t lenCam;  
 double baseline= 150.0;     // Baseline distance in meter (150m for urban, 320m for freeway)
 
-uint32_t numVeh;
-// uint32_t infVeh;
+uint32_t ueVehNum;
+uint32_t infVehNum;
+uint32_t allVehNum;
 
 // Responders users 
 NodeContainer ueVeh;
-NodeContainer vVeh;
-// NodeContainer infVeh;
-// NodeContainer allVeh;
+NodeContainer infVeh;
+NodeContainer allVeh;
 
 
-struct SendMsg
-{
-    uint64_t m_genTime;
-    uint32_t m_ID;
-    double m_xPos;
-    double m_yPos;
-};
+// average AOI
+int64_t last_pkt_time[14][14] = {0};
+int64_t last_comm_time[14][14] = {0};
+int64_t all_aoi[14][14] = {0};
+int64_t all_time[14][14] = {0};
 
 
 void 
@@ -98,6 +57,7 @@ PrintStatus (uint32_t s_period)
     Simulator::Schedule(Seconds(s_period), &PrintStatus, s_period);
 }
 
+/*
 void 
 SaveDistance ()
 {
@@ -143,6 +103,7 @@ SaveDistance ()
 
     Simulator::Schedule(MilliSeconds(1), &SaveDistance);
 }
+*/
 
 void
 SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
@@ -151,17 +112,10 @@ SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
     Ptr<CutInMobilityModel> posMobility = node->GetObject<CutInMobilityModel>();
     Vector posTx = posMobility->GetPosition();
 
-    CutInMobilityModel::VehState veh_state = posMobility->DoGetVehState();
-
-    // SendMsg msg = {
-    //     simTime,
-    //     id,
-    //     posTx.x,
-    //     posTx.y
-    // };
+    CutInMobilityModel::V2V_PACKET v2v_pkt = posMobility->DoGenerateV2VPacket();
 
     // check for each UE distance to transmitter
-    for (uint8_t i=0; i< numVeh;i++)
+    for (uint8_t i=0; i< ueVehNum;i++)
     {
         Ptr<MobilityModel> mob = ueVeh.Get(i)->GetObject<MobilityModel>(); 
         Vector posRx = mob->GetPosition();
@@ -175,7 +129,7 @@ SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
     // Generate CAM 
     // std::ostringstream msgCam;
     // msgCam << id << ";" << simTime << ";" << (int) posTx.x << ";" << (int) posTx.y << '\0'; 
-    Ptr<Packet> packet = Create<Packet>((uint8_t*)(&veh_state), lenCam);
+    Ptr<Packet> packet = Create<Packet>((uint8_t*)(&v2v_pkt), lenCam);
     socket->Send(packet);
 }
 
@@ -184,26 +138,37 @@ ReceivePacket(Ptr<Socket> socket)
 {   
     Ptr<Node> node = socket->GetNode();
     uint32_t rxID = node->GetId();
-    uint64_t rxTime = Simulator::Now().GetMilliSeconds();
+    int64_t rxTime = Simulator::Now().GetMilliSeconds();
     Ptr<CutInMobilityModel> posMobility = node->GetObject<CutInMobilityModel>();
     Vector posRx = posMobility->GetPosition();
 
 
     // SendMsg msg;
-    CutInMobilityModel::VehState veh_state;
+    CutInMobilityModel::V2V_PACKET v2v_pkt;
     Ptr<Packet> packet = socket->Recv (); 
-    packet->CopyData((uint8_t*)&veh_state, sizeof(CutInMobilityModel::VehState));
+    packet->CopyData((uint8_t*)&v2v_pkt, sizeof(CutInMobilityModel::V2V_PACKET));
+    uint32_t txID = v2v_pkt.m_id;
 
-    posMobility->DoPassVehState(veh_state);
+    posMobility->DoPassV2VPacket(v2v_pkt);
 
-    double distance = sqrt(pow((veh_state.m_position.m_x - posRx.x),2.0)+pow((veh_state.m_position.m_y - posRx.y), 2.0));
+    double distance = sqrt(pow((v2v_pkt.m_x - posRx.x),2.0)+pow((v2v_pkt.m_y - posRx.y), 2.0));
     if (distance <= baseline)
     {         
         ctr_totRx++; 
     }
     
-    *log_rx_data->GetStream() << veh_state.m_genTime << " " << veh_state.m_ID << " " << rxTime << " " << rxID << " " << distance << "\n";
+    if (rxTime >= 5000)
+    {
+        int64_t head = last_comm_time[txID][rxID] - last_pkt_time[txID][rxID];
+        int64_t height = rxTime - last_comm_time[txID][rxID];
+        int64_t bottom = head + height;
 
+        all_aoi[txID][rxID] += (head + bottom) * height / 2;
+        all_time[txID][rxID] += height;
+
+        last_comm_time[txID][rxID] = rxTime;
+        last_pkt_time[txID][rxID] = v2v_pkt.m_time_stamp;
+    }
 }
 
 int 
@@ -216,12 +181,15 @@ main (int argc, char *argv[])
     LogComponentEnable ("v2x_communication_mode_4", LOG_INFO);
 
 
+
+
+
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
     int run = 1;
     uint16_t simTime = 30;                 // Simulation time in seconds
-    numVeh = 12;                  // Number of vehicles
-    int infVeh = 20;
+    ueVehNum = 0;                  // Number of vehicles
+    infVehNum = 0;
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
     double ueTxPower = 23.0;                // Transmission power in dBm
     double probResourceKeep = 0.0;          // Probability to select the previous resource again [0.0-0.8]
@@ -236,14 +204,15 @@ main (int argc, char *argv[])
     uint16_t t1 = 4;                        // T1 value of selection window
     uint16_t t2 = 20;                      // T2 value of selection window
     uint16_t slBandwidth;                   // Sidelink bandwidth
-    CutInMobilityModel::TrafficLevel level = CutInMobilityModel::TrafficLevel::L3;
 
     // Command line arguments
     CommandLine cmd;
     cmd.AddValue ("time", "Simulation Time", simTime);
     cmd.AddValue ("run", "run value of simulation", run);
-    cmd.AddValue ("numVeh", "Number of Vehicles", numVeh);
-    cmd.AddValue ("infVeh", "Number of Inf Vehicles", infVeh);
+
+    cmd.AddValue ("ueVehNum", "Number of Vehicles", ueVehNum);
+    cmd.AddValue ("infVehNum", "Number of Inf Vehicles", infVehNum);
+
     cmd.AddValue ("adjacencyPscchPssch", "Scheme for subchannelization", adjacencyPscchPssch); 
     cmd.AddValue ("sizeSubchannel", "Number of RBs per Subchannel", sizeSubchannel);
     cmd.AddValue ("numSubchannel", "Number of Subchannels", numSubchannel);
@@ -260,19 +229,10 @@ main (int argc, char *argv[])
     RngSeedManager::SetSeed(1);
     RngSeedManager::SetRun(run);
 
+
     AsciiTraceHelper ascii;
-    rx_data = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + rx_data;
-    log_rx_data = ascii.CreateFileStream(rx_data);
-    
-    std::string dist_data_50m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_50_" + dist_data;
-    std::string dist_data_100m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_100_" + dist_data;
-    std::string dist_data_200m = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + "_200_" + dist_data;
-    log_dist_data_50m = ascii.CreateFileStream(dist_data_50m);
-    log_dist_data_100m = ascii.CreateFileStream(dist_data_100m);
-    log_dist_data_200m = ascii.CreateFileStream(dist_data_200m);
-    
-    average_pos_err = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + average_pos_err;
-    log_poisition_error = ascii.CreateFileStream(average_pos_err);
+    // rx_data = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + rx_data;
+    // log_rx_data = ascii.CreateFileStream(rx_data);
 
 
     NS_LOG_INFO ("Starting network configuration..."); 
@@ -280,24 +240,11 @@ main (int argc, char *argv[])
     // Set the UEs power in dBm
     Config::SetDefault ("ns3::LteUePhy::TxPower", DoubleValue (ueTxPower));
     Config::SetDefault ("ns3::LteUePhy::RsrpUeMeasThreshold", DoubleValue (-10.0));
-    // Enable V2X communication on PHY layer
     Config::SetDefault ("ns3::LteUePhy::EnableV2x", BooleanValue (true));
-
-    // Set power
     Config::SetDefault ("ns3::LteUePowerControl::Pcmax", DoubleValue (ueTxPower));
     Config::SetDefault ("ns3::LteUePowerControl::PsschTxPower", DoubleValue (ueTxPower));
     Config::SetDefault ("ns3::LteUePowerControl::PscchTxPower", DoubleValue (ueTxPower));
-
-    if (adjacencyPscchPssch) 
-    {
-        slBandwidth = sizeSubchannel * numSubchannel;
-    }
-    else 
-    {
-        slBandwidth = (sizeSubchannel+2) * numSubchannel; 
-    }
-
-    // Configure for UE selected
+    slBandwidth = adjacencyPscchPssch ? (sizeSubchannel * numSubchannel) : ((sizeSubchannel+2) * numSubchannel);
     Config::SetDefault ("ns3::LteUeMac::UlBandwidth", UintegerValue(slBandwidth));
     Config::SetDefault ("ns3::LteUeMac::EnableV2xHarq", BooleanValue(harqEnabled));
     Config::SetDefault ("ns3::LteUeMac::EnableAdjacencyPscchPssch", BooleanValue(adjacencyPscchPssch));
@@ -316,82 +263,73 @@ main (int argc, char *argv[])
     ConfigStore inputConfig; 
     inputConfig.ConfigureDefaults(); 
 
-    // Create node container to hold all UEs 
-    // NodeContainer ueAllNodes; 
-
     NS_LOG_INFO ("Installing Mobility Model...");
-
-
-    // Create nodes
-    std::list<CutInMobilityModel::VehPosition> main_init_pos = 
-    CutInMobilityModel::GetInitPosition(level, 
-                                        CutInMobilityModel::BelongTo::MAIN_ROAD);
+    std::list<Vector> main_init_pos = CutInMobilityModel::GetInitPosition(CutInMobilityModel::BelongTo::MAIN_ROAD);
     uint32_t main_veh_num = main_init_pos.size();
-    std::list<CutInMobilityModel::VehPosition> merge_init_pos = 
-    CutInMobilityModel::GetInitPosition(level, 
-                                        CutInMobilityModel::BelongTo::MERGE_ROAD);
+
+    std::list<Vector> merge_init_pos = CutInMobilityModel::GetInitPosition(CutInMobilityModel::BelongTo::MERGE_ROAD);
     uint32_t merge_veh_num = merge_init_pos.size();
 
-    numVeh = main_veh_num + merge_veh_num;
-    ueVeh.Create (numVeh + infVeh);
+    ueVehNum = main_veh_num + merge_veh_num;
+    allVehNum = ueVehNum + infVehNum;
 
+    ueVeh.Create(ueVehNum);
+    infVeh.Create (infVehNum);
+
+    allVeh.Add(ueVeh);
+    allVeh.Add(infVeh);
+
+    for (uint32_t i = 0; i < ueVehNum; i++)
+    {
+        for (uint32_t j = 0; j < ueVehNum; j++)
+        {
+            last_comm_time[i][j] = 5000;
+            last_pkt_time[i][j] = 5000;
+        }
+    }
 
     // Install constant random positions 
+    // ue veh
+    Ptr<ListPositionAllocator> LPA = CreateObject<ListPositionAllocator>();
+    MobilityHelper CutInMMH;
+    CutInMMH.SetMobilityModel("ns3::CutInMobilityModel"); 
+    CutInMMH.SetPositionAllocator(LPA);
 
+    for (uint32_t i = 0; i < ueVehNum; i++)
+        LPA->Add(Vector(0.0, 0.0, 0.0));
+    CutInMMH.Install(ueVeh);
 
-    MobilityHelper mobVeh;
-    mobVeh.SetMobilityModel("ns3::CutInMobilityModel"); 
-
-    Ptr<UniformRandomVariable> RV = CreateObject<UniformRandomVariable> ();
-    std::list<CutInMobilityModel::VehPosition>::iterator posItr;
-    Ptr<ListPositionAllocator> staticVeh[numVeh+infVeh];
-
-    posItr = main_init_pos.begin();
-    for (uint16_t i=0; i< main_veh_num;i++, posItr++)
-    {
-        staticVeh[i] = CreateObject<ListPositionAllocator>();
-        staticVeh[i]->Add(Vector(posItr->m_x, posItr->m_y, 1.5)); 
-        mobVeh.SetPositionAllocator(staticVeh[i]);
-        mobVeh.Install(ueVeh.Get(i));
-
-        vVeh.Add(ueVeh.Get(i));
-
-        Ptr<CutInMobilityModel> cimm = ueVeh.Get(i)->GetObject<CutInMobilityModel>();
-        cimm->ScheduleToStart(i, 5000, level, CutInMobilityModel::BelongTo::MAIN_ROAD);
-    }
+    std::list<Vector>::iterator posItr=main_init_pos.begin();
+    for (uint32_t i = 0; i < main_veh_num; i++, posItr++)
+        ueVeh.Get(i)->GetObject<CutInMobilityModel>()->
+        InitAndScheduleToStart(i, 5000, *posItr, CutInMobilityModel::BelongTo::MAIN_ROAD);
 
     posItr = merge_init_pos.begin();
-    for (uint16_t i=main_veh_num; i< numVeh; i++, posItr++)
-    {
-        staticVeh[i] = CreateObject<ListPositionAllocator>();
-        staticVeh[i]->Add(Vector(posItr->m_x, posItr->m_y, 1.5)); 
-        mobVeh.SetPositionAllocator(staticVeh[i]);
-        mobVeh.Install(ueVeh.Get(i));
+    for (uint32_t i = main_veh_num; i < main_veh_num + merge_veh_num; i++, posItr++)
+        ueVeh.Get(i)->GetObject<CutInMobilityModel>()->
+        InitAndScheduleToStart(i, 5000, *posItr, CutInMobilityModel::BelongTo::MERGE_ROAD);
 
-        vVeh.Add(ueVeh.Get(i));
+    CutInMobilityModel::InitServer();
 
-        Ptr<CutInMobilityModel> cimm = ueVeh.Get(i)->GetObject<CutInMobilityModel>();
-        cimm->ScheduleToStart(i, 5000, level, CutInMobilityModel::BelongTo::MERGE_ROAD);
-    }
+    // inf veh
+    Ptr<UniformRandomVariable> RV = CreateObject<UniformRandomVariable> ();
+    MobilityHelper RD2DMMH; 
 
-    mobVeh.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    for (uint16_t i = numVeh; i < numVeh + infVeh; i++)
-    {   
-        double x = RV->GetValue(-575, -175);
-        double y = RV->GetValue(-3.75 - 200/sqrt(3) - 3.75, 3.75);
-        staticVeh[i] = CreateObject<ListPositionAllocator>();
-        staticVeh[i]->Add(Vector(x, y, 1.5));
+    Ptr<MobilityModel> RD2DMM = CreateObject<RandomDirection2dMobilityModel>();
+    RD2DMM->SetAttribute("Bounds", RectangleValue (Rectangle (-575, -175, -55, 5)));
 
-        mobVeh.SetPositionAllocator(staticVeh[i]);
-        mobVeh.Install(ueVeh.Get(i));
-    }
+    Ptr<ns3::RandomRectanglePositionAllocator> RRPLA = CreateObject<RandomRectanglePositionAllocator>();
+    RRPLA->SetAttribute("X", StringValue ("ns3::UniformRandomVariable[Min=-575.0|Max=-175.0]"));
+    RRPLA->SetAttribute("Y", StringValue ("ns3::UniformRandomVariable[Min=-55.0|Max=5.0]"));
 
+    RD2DMMH.SetMobilityModel("ns3::RandomDirection2dMobilityModel");
+    RD2DMMH.SetPositionAllocator(RRPLA);
+    RD2DMMH.Install(infVeh);
 
 
     NS_LOG_INFO ("Creating helpers...");
     // EPC
     Ptr<PointToPointEpcHelper> epcHelper = CreateObject<PointToPointEpcHelper>();
-
     // LTE Helper
     Ptr<LteHelper> lteHelper = CreateObject<LteHelper>();
     lteHelper->SetEpcHelper(epcHelper);
@@ -399,7 +337,6 @@ main (int argc, char *argv[])
     lteHelper->SetEnbAntennaModelType ("ns3::NistParabolic3dAntennaModel");
     lteHelper->SetAttribute ("UseSameUlDlPropagationCondition", BooleanValue(true));
     lteHelper->SetAttribute ("PathlossModel", StringValue ("ns3::CniUrbanmicrocellPropagationLossModel"));
-    
     // V2X Helper
     Ptr<LteV2xHelper> lteV2xHelper = CreateObject<LteV2xHelper> ();
     lteV2xHelper->SetLteHelper (lteHelper); 
@@ -407,8 +344,6 @@ main (int argc, char *argv[])
     // Create eNB Container
     NodeContainer eNodeB;
     eNodeB.Create(1); 
-
-    // Topology eNodeB
     Ptr<ListPositionAllocator> pos_eNB = CreateObject<ListPositionAllocator>(); 
     pos_eNB->Add(Vector(5,-10,30));
     MobilityHelper mob_eNB;
@@ -421,28 +356,28 @@ main (int argc, char *argv[])
 
     // Required to use NIST 3GPP model
     BuildingsHelper::Install (eNodeB);
-    BuildingsHelper::Install (ueVeh);
+    BuildingsHelper::Install (allVeh);
     BuildingsHelper::MakeMobilityModelConsistent (); 
 
     // Install LTE devices to all UEs 
     NS_LOG_INFO ("Installing UE's network devices...");
     lteHelper->SetAttribute("UseSidelink", BooleanValue (true));
-    NetDeviceContainer ueDevs = lteHelper->InstallUeDevice (ueVeh);
+    NetDeviceContainer allDevs = lteHelper->InstallUeDevice (allVeh);
 
     // Install the IP stack on the UEs
     NS_LOG_INFO ("Installing IP stack..."); 
     InternetStackHelper internet;
-    internet.Install (ueVeh); 
+    internet.Install (allVeh); 
 
     // Assign IP adress to UEs
     NS_LOG_INFO ("Allocating IP addresses and setting up network route...");
     Ipv4InterfaceContainer ueIpIface; 
-    ueIpIface = epcHelper->AssignUeIpv4Address (ueDevs);
+    ueIpIface = epcHelper->AssignUeIpv4Address (allDevs);
     Ipv4StaticRoutingHelper Ipv4RoutingHelper;
 
-    for(uint32_t u = 0; u < ueVeh.GetN(); ++u)
+    for(uint32_t u = 0; u < allVeh.GetN(); ++u)
     {
-        Ptr<Node> ueNode = ueVeh.Get(u);
+        Ptr<Node> ueNode = allVeh.Get(u);
         // Set the default gateway for the UE
         Ptr<Ipv4StaticRouting> ueStaticRouting = Ipv4RoutingHelper.GetStaticRouting(ueNode->GetObject<Ipv4>());
         ueStaticRouting->SetDefaultRoute (epcHelper->GetUeDefaultGatewayAddress(), 1);
@@ -450,11 +385,11 @@ main (int argc, char *argv[])
 
     NS_LOG_INFO("Attaching UE's to LTE network...");
     //Attach each UE to the best available eNB
-    lteHelper->Attach(ueDevs); 
+    lteHelper->Attach(allDevs); 
 
     NS_LOG_INFO ("Creating sidelink groups...");
     std::vector<NetDeviceContainer> txGroups;
-    txGroups = lteV2xHelper->AssociateForV2xBroadcast(ueDevs, numVeh+infVeh); 
+    txGroups = lteV2xHelper->AssociateForV2xBroadcast(allDevs, allVehNum); 
     lteV2xHelper->PrintGroups(txGroups); 
 
     NS_LOG_INFO ("Installing applications...");
@@ -467,10 +402,6 @@ main (int argc, char *argv[])
 
     for(std::vector<NetDeviceContainer>::iterator gIt=txGroups.begin(); gIt != txGroups.end(); gIt++)
     {
-        // Create Sidelink bearers
-        // Use Tx for the group transmitter and Rx for all the receivers
-        // Split Tx/Rx
-
         NetDeviceContainer txUe ((*gIt).Get(0));
         NetDeviceContainer rxUes = lteV2xHelper->RemoveNetDevice ((*gIt), txUe.Get (0));
 
@@ -491,12 +422,12 @@ main (int argc, char *argv[])
 
 
         Ptr<LteUeMac> ueMac = DynamicCast<LteUeMac>( txUe.Get (0)->GetObject<LteUeNetDevice> ()->GetMac () );
-        if (vehID < numVeh)
+        if (vehID < ueVehNum)
             ueMac->TraceConnectWithoutContext ("SidelinkV2xAnnouncement", MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace, host));
 
         Ptr<Socket> sink = Socket::CreateSocket(txUe.Get(0)->GetNode(),TypeId::LookupByName ("ns3::UdpSocketFactory"));
         sink->Bind(InetSocketAddress (Ipv4Address::GetAny (), application_port));
-        if (vehID < numVeh)
+        if (vehID < ueVehNum)
             sink->SetRecvCallback (MakeCallback (&ReceivePacket));
 
         //store and increment addresses
@@ -533,17 +464,17 @@ main (int argc, char *argv[])
         ueSidelinkConfiguration->SetSlV2xPreconfiguration (preconfiguration); 
 
         // Print Configuration
-        *log_rx_data->GetStream() << "RxPackets;RxTime;RxId;TxId;TxTime;xPos;yPos" << std::endl;
+        // *log_rx_data->GetStream() << "RxPackets;RxTime;RxId;TxId;TxTime;xPos;yPos" << std::endl;
 
         NS_LOG_INFO ("Installing Sidelink Configuration...");
-        lteHelper->InstallSidelinkV2xConfiguration (ueDevs, ueSidelinkConfiguration);
+        lteHelper->InstallSidelinkV2xConfiguration (allDevs, ueSidelinkConfiguration);
 
         NS_LOG_INFO ("Enabling LTE traces...");
         lteHelper->EnableTraces();
 
         // *log_simtime->GetStream() << "Simtime;TotalRx;TotalTx;PRR" << std::endl; 
         Simulator::Schedule(Seconds(1), &PrintStatus, 1);
-        Simulator::Schedule(Seconds(1.0), &SaveDistance);
+        // Simulator::Schedule(Seconds(1.0), &SaveDistance);
 
         NS_LOG_INFO ("Starting Simulation...");
         Simulator::Stop(MilliSeconds(simTime*1000+40));
@@ -555,6 +486,32 @@ main (int argc, char *argv[])
         end = std::clock();
         std::cout << (double)(end - start) / CLOCKS_PER_SEC << std::endl;
 
-        CutInMobilityModel::PrintPositionError(log_poisition_error);
+
+        std::string average_pos_err = "./simulation_results/" + std::to_string(infVehNum) + "_" + std::to_string(run) + "_position_error";
+        Ptr<ns3::OutputStreamWrapper> position_error = ascii.CreateFileStream(average_pos_err);
+
+        std::string average_AoI_over = "./simulation_results/" + std::to_string(infVehNum) + "_" + std::to_string(run) + "_AoI_over";
+        Ptr<ns3::OutputStreamWrapper> AoI_over = ascii.CreateFileStream(average_AoI_over);
+
+        CutInMobilityModel::PrintAoIOverRate(AoI_over);
+        CutInMobilityModel::PrintPositionErrorRate(position_error);
+
+        double temp_ave_aoi = 0.0;
+        double ave_aoi_num = 0.0;
+        for (uint32_t i = 0; i < ueVehNum; i++)
+        {
+            for (uint32_t j = 0; j < ueVehNum; j++)
+            {
+                if (all_aoi[i][j] != 0)
+                {
+                    temp_ave_aoi += ((double)all_aoi[i][j]) / ((double)all_time[i][j]);
+                    ave_aoi_num += 1;
+                }
+            }
+        }
+
+        *AoI_over->GetStream() << "Average AOI = " << temp_ave_aoi/ave_aoi_num << std::endl;
+        std::cout << ave_aoi_num << std::endl;
+
         return 0;  
 }   
