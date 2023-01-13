@@ -187,7 +187,7 @@ main (int argc, char *argv[])
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
     int run = 1;
-    uint16_t simTime = 20;                 // Simulation time in seconds
+    uint16_t simTime = 30;                 // Simulation time in seconds
     ueVehNum = 0;                  // Number of vehicles
     infVehNum = 0;
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
