@@ -57,53 +57,6 @@ PrintStatus (uint32_t s_period)
     Simulator::Schedule(Seconds(s_period), &PrintStatus, s_period);
 }
 
-/*
-void 
-SaveDistance ()
-{
-    uint64_t simTime = Simulator::Now().GetMilliSeconds();
-    *log_dist_data_50m->GetStream() << simTime;
-    *log_dist_data_100m->GetStream() << simTime;
-    *log_dist_data_200m->GetStream() << simTime;
-
-    NodeContainer::Iterator NodeItr1, NodeItr2;
-    Ptr<MobilityModel> MobPtr1, MobPtr2;
-    Vector v1, v2;
-    double distance;
-    double threshold_50 = pow(50.0, 2);
-    double threshold_100 = pow(100.0, 2);
-    double threshold_200 = pow(200.0, 2);
-    for (NodeItr1 = vVeh.Begin(); NodeItr1 != vVeh.End(); NodeItr1++)
-    {
-        MobPtr1 = (*NodeItr1)->GetObject<MobilityModel>(); 
-        v1 = MobPtr1->GetPosition();
-        for (NodeItr2 = (NodeItr1+1); NodeItr2 != vVeh.End(); NodeItr2++)
-        {
-            MobPtr2 = (*NodeItr2)->GetObject<MobilityModel>(); 
-            v2 = MobPtr2->GetPosition();
-            distance = pow(v1.x-v2.x, 2) + pow(v1.y-v2.y, 2);
-            if (distance > threshold_200)
-            {
-                *log_dist_data_50m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-                *log_dist_data_200m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-            }
-            else if (distance > threshold_100)
-            {
-                *log_dist_data_50m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-                *log_dist_data_100m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">"; 
-            }
-            else if (distance > threshold_50)
-                *log_dist_data_50m->GetStream() << "<" <<(*NodeItr1)->GetId() << "," << (*NodeItr2)->GetId() << ">";             
-        }
-    }
-    *log_dist_data_50m->GetStream() << "\n";
-    *log_dist_data_100m->GetStream() << "\n";
-    *log_dist_data_200m->GetStream() << "\n";
-
-    Simulator::Schedule(MilliSeconds(1), &SaveDistance);
-}
-*/
 
 void
 SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
@@ -187,7 +140,7 @@ main (int argc, char *argv[])
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
     int run = 1;
-    uint16_t simTime = 30;                 // Simulation time in seconds
+    uint16_t simTime = 40;                 // Simulation time in seconds
     ueVehNum = 0;                  // Number of vehicles
     infVehNum = 0;
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
