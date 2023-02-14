@@ -35,6 +35,8 @@ CutInMobilityModel::GetInitPosition (CutInMobilityModel::BelongTo belong_to)
     // VehPosition pos;
     int vehnum = rand() % (7-6+1) + 6;
     double start_point = RV->GetValue(0.0, 5.0);
+    if (belong_to == CutInMobilityModel::BelongTo::MAIN_ROAD)
+        start_point += 200*(1/COS_15 - 1);
     // double x = -(375.0 + RV->GetValue(0.0, 5.0));
     double interval = 200.0 / double(vehnum - 1);
 
