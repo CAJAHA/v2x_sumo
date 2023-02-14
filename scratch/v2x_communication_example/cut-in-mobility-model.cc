@@ -190,7 +190,7 @@ CutInMobilityModel::InitAndScheduleToStart
 
     Simulator::Schedule(MilliSeconds(start_time), &CutInMobilityModel::StartToMove, this, start_velocity);
     Simulator::Schedule(MilliSeconds(start_time + 1), &CutInMobilityModel::RefreshEntireBuffer, this);
-    uint32_t offset = rand()%(100 - 2 + 1) + 2;
+    uint32_t offset = rand()%(101 - 2 + 1) + 2;
     // uint32_t offset = 2;
     Simulator::Schedule(MilliSeconds(start_time+offset), &CutInMobilityModel::ChangeAction, this);
 }
