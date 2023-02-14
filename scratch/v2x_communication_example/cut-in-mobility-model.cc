@@ -61,7 +61,7 @@ CutInMobilityModel::InitServer()
     memset(&ServerAddr, '0', sizeof (sockaddr_in));
     ServerAddr.sin_family = AF_INET;
     ServerAddr.sin_port = htons(10889);
-    ServerAddr.sin_addr.s_addr = inet_addr("192.168.1.100");
+    ServerAddr.sin_addr.s_addr = inet_addr("192.168.180.1");
 
     ClientSock = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -190,7 +190,7 @@ CutInMobilityModel::InitAndScheduleToStart
 
     Simulator::Schedule(MilliSeconds(start_time), &CutInMobilityModel::StartToMove, this, start_velocity);
     Simulator::Schedule(MilliSeconds(start_time + 1), &CutInMobilityModel::RefreshEntireBuffer, this);
-    uint32_t offset = rand()%(100 - 2 + 1) + 2;
+    uint32_t offset = rand()%(101 - 2 + 1) + 2;
     // uint32_t offset = 2;
     Simulator::Schedule(MilliSeconds(start_time+offset), &CutInMobilityModel::ChangeAction, this);
 }
