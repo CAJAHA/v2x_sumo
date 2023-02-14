@@ -61,7 +61,7 @@ CutInMobilityModel::InitServer()
     memset(&ServerAddr, '0', sizeof (sockaddr_in));
     ServerAddr.sin_family = AF_INET;
     ServerAddr.sin_port = htons(10889);
-    ServerAddr.sin_addr.s_addr = inet_addr("192.168.138.1");
+    ServerAddr.sin_addr.s_addr = inet_addr("192.168.180.1");
 
     ClientSock = socket(AF_INET, SOCK_STREAM, 0);
 
