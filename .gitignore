@@ -35,6 +35,8 @@ TAGS
 .lock-waf_*_build
 .waf*
 
+./simulation_results/*
+
 build-dir/
 build/
 /.cproject
