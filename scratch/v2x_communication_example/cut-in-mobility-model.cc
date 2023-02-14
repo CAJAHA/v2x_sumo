@@ -34,15 +34,18 @@ CutInMobilityModel::GetInitPosition (CutInMobilityModel::BelongTo belong_to)
     Ptr<ns3::UniformRandomVariable> RV = CreateObject<UniformRandomVariable> ();
     // VehPosition pos;
     int vehnum = rand() % (7-6+1) + 6;
-    double x = -(375.0 + RV->GetValue(0.0, 5.0));
+    double start_point = RV->GetValue(0.0, 5.0);
+    // double x = -(375.0 + RV->GetValue(0.0, 5.0));
     double interval = 200.0 / double(vehnum - 1);
 
     for (int i = 0; i < vehnum; i++)
     {
         double y = (belong_to == BelongTo::MAIN_ROAD) ? 0.0 : (-3.75-TAN_15*200);
+        double x = -(375.0 + start_point);
+
         Vector pos = {x, y, Z_OF_VEHICLE};
         return_list.push_back(pos);
-        x -= (interval + RV->GetValue(-3.0, 3.0));
+        start_point += (interval + RV->GetValue(-3.0, 3.0));
     }
 
     return return_list;
