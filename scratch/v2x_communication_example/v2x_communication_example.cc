@@ -44,6 +44,8 @@ int64_t last_comm_time[14][14] = {0};
 int64_t all_aoi[14][14] = {0};
 int64_t all_time[14][14] = {0};
 
+const uint32_t ERR_ID = 999;
+
 
 void 
 PrintStatus (uint32_t s_period)
@@ -58,6 +60,36 @@ PrintStatus (uint32_t s_period)
 }
 
 
+void 
+SidelinkV2xAnnouncementMacTrace_(Ptr<Socket> socket)
+{
+    Ptr<Node> node = socket->GetNode();
+    Ptr<MobilityModel> posMobility = node->GetObject<MobilityModel>();
+    Vector posTx = posMobility->GetPosition();
+
+    CutInMobilityModel::V2V_PACKET pkt = {posTx.x, posTx.y, 0.0, 0.0, ERR_ID, 0};
+    Ptr<Packet> packet = Create<Packet>((uint8_t*)(&pkt), lenCam);
+    socket->Send(packet);
+
+    // check for each UE distance to transmitter
+    int64_t rxTime = Simulator::Now().GetMilliSeconds(); 
+    if (rxTime > 5000)
+    {
+        for (NodeContainer::Iterator nodeIt = allVeh.Begin(); nodeIt != allVeh.End(); nodeIt++)
+        {
+            Ptr<MobilityModel> mob = (*nodeIt)->GetObject<MobilityModel>(); 
+            Vector posRx = mob->GetPosition();
+            
+            double distance = sqrt(pow((posTx.x - posRx.x),2.0)
+                                +pow((posTx.y - posRx.y),2.0));
+            if  ((distance > 0) && (distance <= baseline))
+                ctr_totTx++;
+        }
+    }
+}
+
+
+
 void
 SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
 {
@@ -66,24 +98,47 @@ SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
     Vector posTx = posMobility->GetPosition();
 
     CutInMobilityModel::V2V_PACKET v2v_pkt = posMobility->DoGenerateV2VPacket();
-
-    // check for each UE distance to transmitter
-    for (uint8_t i=0; i< ueVehNum;i++)
-    {
-        Ptr<MobilityModel> mob = ueVeh.Get(i)->GetObject<MobilityModel>(); 
-        Vector posRx = mob->GetPosition();
-        
-        double distance = sqrt(pow((posTx.x - posRx.x),2.0)+pow((posTx.y - posRx.y),2.0));
-        if  (distance > 0 && distance <= baseline)
-        {
-            ctr_totTx++;
-        }
-    }
-    // Generate CAM 
-    // std::ostringstream msgCam;
-    // msgCam << id << ";" << simTime << ";" << (int) posTx.x << ";" << (int) posTx.y << '\0'; 
     Ptr<Packet> packet = Create<Packet>((uint8_t*)(&v2v_pkt), lenCam);
     socket->Send(packet);
+
+    // check for each UE distance to transmitter
+    int64_t rxTime = Simulator::Now().GetMilliSeconds(); 
+    if (rxTime > 5000)
+    {
+        for (NodeContainer::Iterator nodeIt = allVeh.Begin(); nodeIt != allVeh.End(); nodeIt++)
+        {
+            Ptr<MobilityModel> mob = (*nodeIt)->GetObject<MobilityModel>(); 
+            Vector posRx = mob->GetPosition();
+            
+            double distance = sqrt(pow((posTx.x - posRx.x),2.0)
+                                +pow((posTx.y - posRx.y),2.0));
+            if  ((distance > 0) && (distance <= baseline))
+            {
+                ctr_totTx++;
+            }
+        }
+    }
+}
+
+
+static void 
+ReceivePacket_(Ptr<Socket> socket)
+{
+    // socket->Recv ();
+    Ptr<Node> node = socket->GetNode();
+    int64_t rxTime = Simulator::Now().GetMilliSeconds();    
+
+    Ptr<MobilityModel> posMobility = node->GetObject<MobilityModel>();
+    Vector posRx = posMobility->GetPosition();
+
+    // SendMsg msg;
+    CutInMobilityModel::V2V_PACKET v2v_pkt;
+    Ptr<Packet> packet = socket->Recv (); 
+    packet->CopyData((uint8_t*)&v2v_pkt, sizeof(CutInMobilityModel::V2V_PACKET));
+
+    double distance = sqrt(pow((v2v_pkt.m_x - posRx.x),2.0)+pow((v2v_pkt.m_y - posRx.y), 2.0));
+    if ((distance <= baseline) && (rxTime > 5000))
+        ctr_totRx++; 
 }
 
 static void
@@ -101,16 +156,14 @@ ReceivePacket(Ptr<Socket> socket)
     Ptr<Packet> packet = socket->Recv (); 
     packet->CopyData((uint8_t*)&v2v_pkt, sizeof(CutInMobilityModel::V2V_PACKET));
     uint32_t txID = v2v_pkt.m_id;
-
-    posMobility->DoPassV2VPacket(v2v_pkt);
+    if (txID != ERR_ID)
+        posMobility->DoPassV2VPacket(v2v_pkt);
 
     double distance = sqrt(pow((v2v_pkt.m_x - posRx.x),2.0)+pow((v2v_pkt.m_y - posRx.y), 2.0));
-    if (distance <= baseline)
-    {         
+    if ((distance <= baseline) && (rxTime > 5000))     
         ctr_totRx++; 
-    }
     
-    if (rxTime >= 5000)
+    if ((rxTime >= 5000) && (txID != ERR_ID))
     {
         int64_t head = last_comm_time[txID][rxID] - last_pkt_time[txID][rxID];
         int64_t height = rxTime - last_comm_time[txID][rxID];
@@ -140,9 +193,9 @@ main (int argc, char *argv[])
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
     int run = 1;
-    uint16_t simTime = 40;                 // Simulation time in seconds
+    uint16_t simTime = 30;                 // Simulation time in seconds
     ueVehNum = 0;                  // Number of vehicles
-    infVehNum = 0;
+    infVehNum = 9;
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
     double ueTxPower = 23.0;                // Transmission power in dBm
     double probResourceKeep = 0.0;          // Probability to select the previous resource again [0.0-0.8]
@@ -268,14 +321,11 @@ main (int argc, char *argv[])
     Ptr<UniformRandomVariable> RV = CreateObject<UniformRandomVariable> ();
     MobilityHelper RD2DMMH; 
 
-    Ptr<MobilityModel> RD2DMM = CreateObject<RandomDirection2dMobilityModel>();
-    RD2DMM->SetAttribute("Bounds", RectangleValue (Rectangle (-575, -175, -55, 5)));
-
     Ptr<ns3::RandomRectanglePositionAllocator> RRPLA = CreateObject<RandomRectanglePositionAllocator>();
     RRPLA->SetAttribute("X", StringValue ("ns3::UniformRandomVariable[Min=-575.0|Max=-175.0]"));
     RRPLA->SetAttribute("Y", StringValue ("ns3::UniformRandomVariable[Min=-55.0|Max=5.0]"));
 
-    RD2DMMH.SetMobilityModel("ns3::RandomDirection2dMobilityModel");
+    RD2DMMH.SetMobilityModel("ns3::RandomDirection2dMobilityModel", "Bounds", RectangleValue (Rectangle (-575.0, -175.0, -55.0, 5.0)));
     RD2DMMH.SetPositionAllocator(RRPLA);
     RD2DMMH.Install(infVeh);
 
@@ -377,11 +427,15 @@ main (int argc, char *argv[])
         Ptr<LteUeMac> ueMac = DynamicCast<LteUeMac>( txUe.Get (0)->GetObject<LteUeNetDevice> ()->GetMac () );
         if (vehID < ueVehNum)
             ueMac->TraceConnectWithoutContext ("SidelinkV2xAnnouncement", MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace, host));
+        else
+            ueMac->TraceConnectWithoutContext ("SidelinkV2xAnnouncement", MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace_, host));
 
         Ptr<Socket> sink = Socket::CreateSocket(txUe.Get(0)->GetNode(),TypeId::LookupByName ("ns3::UdpSocketFactory"));
         sink->Bind(InetSocketAddress (Ipv4Address::GetAny (), application_port));
         if (vehID < ueVehNum)
             sink->SetRecvCallback (MakeCallback (&ReceivePacket));
+        else
+            sink->SetRecvCallback (MakeCallback (&ReceivePacket_));
 
         //store and increment addresses
         groupL2Addresses.push_back (groupL2Address);

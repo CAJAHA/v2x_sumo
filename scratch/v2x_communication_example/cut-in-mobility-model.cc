@@ -407,14 +407,14 @@ void
 CutInMobilityModel::ChangeAction()
 {
     UpdateSelfState();
-
+    RefreshBuffer();
     if (m_x < -175)
     {
         CalculateAoIOver();
         CalculatePositionError();
     }    
 
-    RefreshBuffer();
+    
     GenerateState();
     GetAction();
 
@@ -425,19 +425,19 @@ CutInMobilityModel::ChangeAction()
 void 
 CutInMobilityModel::CalculatePositionError()
 {
-    // Vector position, ego_position;
+    //  position, ego_position;
     double distance, error;
     for (std::list<CutInMobilityModel*>::iterator ptr = CutInMobilityModels.begin(); ptr != CutInMobilityModels.end(); ptr++)
     {
         if ((*ptr)->m_ID == m_ID)
             continue;
         
-        // position = (*ptr)->DoGetPosition();
+        Vector position = (*ptr)->DoGetPosition();
         // ego_position = DoGetPosition();
         distance = sqrt(pow(m_x-(*ptr)->m_x, 2) + 
                         pow(m_y-(*ptr)->m_y, 2));
-        error = sqrt(pow((*ptr)->m_x - m_vehstates[(*ptr)->m_ID].m_x, 2) + 
-                     pow((*ptr)->m_y - m_vehstates[(*ptr)->m_ID].m_y, 2));
+        error = sqrt(pow(position.x - m_vehstates[(*ptr)->m_ID].m_x, 2) + 
+                     pow(position.y - m_vehstates[(*ptr)->m_ID].m_y, 2));
 
         // std::cout << m_ID << "  " << error << " " << m_vehstates[(*ptr)->m_ID].m_genTime << std::endl;
 

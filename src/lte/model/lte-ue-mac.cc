@@ -3218,7 +3218,8 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 
 	// check all sensing data, 
 	
-	double PowerArray[numCsr][3] = {0};
+	// double PowerArray[numCsr][3] = {0};
+	SPS_DATA_TABLE_ENTRY data_table[numCsr] = {0};
 	int ind;
 	int tempA, tempB;
 	int delta, offset, sf;
@@ -3245,9 +3246,13 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 			if (ind > 3)
 			{
 				ind = (ind-3)*2-2;
-				++PowerArray[ind][0];
-				PowerArray[ind][1] += sensingIt->m_slRsrp;
-				PowerArray[ind][2] += sensingIt->m_slRssi;
+				NS_ASSERT(ind < numCsr);
+				++data_table[ind].recv_num;
+				data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
+				data_table[ind].rssi_acc += sensingIt->m_slRssi;
+			
+				int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
+				data_table[ind].occupy = (subframe_surplus <= 100);
 			}
 		}
 		else
@@ -3265,9 +3270,13 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 				if (ind > 3)
 				{
 					ind = (ind - 3) * 2 - 1;
-					++PowerArray[ind][0];
-					PowerArray[ind][1] += sensingIt->m_slRsrp;
-					PowerArray[ind][2] += sensingIt->m_slRssi;
+					NS_ASSERT(ind < numCsr);
+					++data_table[ind].recv_num;
+					data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
+					data_table[ind].rssi_acc += sensingIt->m_slRssi;
+				
+					int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
+					data_table[ind].occupy = (subframe_surplus <= 100);
 				}
 			}
 			else
@@ -3280,9 +3289,13 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 					if (ind > 3)
 					{
 						ind = (ind - 3) * 2 - 1;
-						++PowerArray[ind][0];
-						PowerArray[ind][1] += sensingIt->m_slRsrp;
-						PowerArray[ind][2] += sensingIt->m_slRssi;
+						NS_ASSERT(ind < numCsr);
+						++data_table[ind].recv_num;
+						data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
+						data_table[ind].rssi_acc += sensingIt->m_slRssi;
+					
+						int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
+						data_table[ind].occupy = (subframe_surplus <= 100);
 					}
 				}
 
@@ -3294,9 +3307,13 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 					if (ind > 3)
 					{
 						ind = (ind - 3) * 2 - 1;
-						++PowerArray[ind][0];
-						PowerArray[ind][1] += sensingIt->m_slRsrp;
-						PowerArray[ind][2] += sensingIt->m_slRssi;
+						NS_ASSERT(ind < numCsr);
+						++data_table[ind].recv_num;
+						data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
+						data_table[ind].rssi_acc += sensingIt->m_slRssi;
+					
+						int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
+						data_table[ind].occupy = (subframe_surplus <= 100);
 					}
 				}
 
@@ -3309,15 +3326,15 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 	// calculate the average rsrp and rssi
 	for (int i = 0; i < numCsr; i++)
 	{
-		if (PowerArray[i][0])	
+		if (data_table[i].occupy)	
 		{
-			PowerArray[i][1] /= PowerArray[i][0];
-			PowerArray[i][2] /= PowerArray[i][0];
+			data_table[i].rsrp_acc /= data_table[i].recv_num;
+			data_table[i].rssi_acc = (data_table[i].rssi_acc + (50-data_table[i].recv_num) * (-200)) / 50;
 		}
 		else
 		{
-			PowerArray[i][1] = -200.0;
-			PowerArray[i][2] = -200.0;
+			data_table[i].rsrp_acc = -200.0;
+			data_table[i].rssi_acc = -200.0;
 		}
 	}
 
@@ -3330,9 +3347,9 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 		surplus = numCsr;
 		for (int i = 0; i < numCsr; i++)
 		{
-			if (!PowerArray[i][0])
+			if (!data_table[i].occupy)
 				continue;
-			if (PowerArray[i][1] >= threshRsrp)
+			if (data_table[i].rsrp_acc >= threshRsrp)
 				surplus--;
 		}
 	}
@@ -3344,10 +3361,10 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 	std::list<CandidateResource> candCsr;
 	for (int i = 0; i < numCsr; i++, csrIt++)
 	{
-		if (PowerArray[i][1] < threshRsrp)
+		if (data_table[i].rsrp_acc < threshRsrp)
 		{
 			temp_candScr.m_txInfo = *csrIt;
-			temp_candScr.m_avg_rssi = PowerArray[i][2];
+			temp_candScr.m_avg_rssi = data_table[i].rssi_acc;
 			candCsr.push_back(temp_candScr);
 		}
 	} 
