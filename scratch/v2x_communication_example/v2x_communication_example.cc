@@ -44,6 +44,7 @@ int64_t last_comm_time[14][14] = {0};
 int64_t all_aoi[14][14] = {0};
 int64_t all_time[14][14] = {0};
 
+
 const uint32_t ERR_ID = 999;
 
 
@@ -193,9 +194,9 @@ main (int argc, char *argv[])
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
     int run = 1;
-    uint16_t simTime = 30;                 // Simulation time in seconds
+    uint16_t simTime = 40;                 // Simulation time in seconds
     ueVehNum = 0;                  // Number of vehicles
-    infVehNum = 9;
+    infVehNum = 40;
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
     double ueTxPower = 23.0;                // Transmission power in dBm
     double probResourceKeep = 0.0;          // Probability to select the previous resource again [0.0-0.8]

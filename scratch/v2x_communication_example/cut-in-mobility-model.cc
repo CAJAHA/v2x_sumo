@@ -13,6 +13,10 @@ int CutInMobilityModel::PositionError[4][5] = {0};
 int CutInMobilityModel::PositionErrorCount[4] = {0};
 int CutInMobilityModel::AoIOverNum[4][5] = {0};
 int CutInMobilityModel::AoITotalNum[4] = {0};
+
+int CutInMobilityModel::AoIRation[7] = {0};
+int CutInMobilityModel::PosErrRatio[11] = {0};
+
 uint32_t CutInMobilityModel::total_vehicles = 0;
 int CutInMobilityModel::ClientSock = 0;
 std::list<CutInMobilityModel*> CutInMobilityModel::CutInMobilityModels;
@@ -60,7 +64,7 @@ CutInMobilityModel::InitServer()
     struct sockaddr_in ServerAddr;
     memset(&ServerAddr, '0', sizeof (sockaddr_in));
     ServerAddr.sin_family = AF_INET;
-    ServerAddr.sin_port = htons(10889);
+    ServerAddr.sin_port = htons(10890);
     ServerAddr.sin_addr.s_addr = inet_addr("192.168.180.1");
 
     ClientSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -442,50 +446,54 @@ CutInMobilityModel::CalculatePositionError()
         // std::cout << m_ID << "  " << error << " " << m_vehstates[(*ptr)->m_ID].m_genTime << std::endl;
 
         int ind1, ind2;
-        switch (int(distance/50.0))
-        {
-        case 0:
-            ind1 = 0;
-            break;
-        case 1:
-            ind1 = 1;
-            break;
-        case 2:
-            ind1 = 2;
-            break;
-        case 3:
-            ind1 = 3;
-            break;
-        default:
-            ind1 = 4;
-            break;
-        }
-        switch ( int(error / 0.5) )
-        {
-            case 0:
-            case 1:
-                ind2 = 0;
-                break;
-            case 2:
-            case 3:
-                ind2 = 1;
-                break;
-            case 4:
-            case 5:
-                ind2 = 2;
-                break;
-            case 6:
-            case 7:
-                ind2 = 3;
-                break;
-            case 8:
-            case 9:
-                ind2 = 4;
-                break;
-            default:
-                ind2 = 5;
-                break;
-        }
+        ind1 = int(distance/50.0);
+        ind1 = (ind1 <= 4) ? ind1 : 4;
+        // switch (int(distance/50.0))
+        // {
+        // case 0:
+        //     ind1 = 0;
+        //     break;
+        // case 1:
+        //     ind1 = 1;
+        //     break;
+        // case 2:
+        //     ind1 = 2;
+        //     break;
+        // case 3:
+        //     ind1 = 3;
+        //     break;
+        // default:
+        //     ind1 = 4;
+        //     break;
+        // }
+        ind2 = int(error);
+        ind2 = (error <= 5) ? ind2 : 5;
+        // switch ( int(error / 0.5) )
+        // {
+        //     case 0:
+        //     case 1:
+        //         ind2 = 0;
+        //         break;
+        //     case 2:
+        //     case 3:
+        //         ind2 = 1;
+        //         break;
+        //     case 4:
+        //     case 5:
+        //         ind2 = 2;
+        //         break;
+        //     case 6:
+        //     case 7:
+        //         ind2 = 3;
+        //         break;
+        //     case 8:
+        //     case 9:
+        //         ind2 = 4;
+        //         break;
+        //     default:
+        //         ind2 = 5;
+        //         break;
+        // }
 
         for (int i = ind1; i < 4; i++)
         {
@@ -493,6 +501,11 @@ CutInMobilityModel::CalculatePositionError()
             for (int j = 0; j < ind2; j++)
                 PositionError[i][j]++;
         }
+
+        int ind3 = int(error/0.5);
+        ind3 = (ind3 <= 10) ? ind3 : 10; 
+        if (distance <= 150.0)
+            PosErrRatio[ind3]++;
     }
 }
 
@@ -516,24 +529,26 @@ CutInMobilityModel::CalculateAoIOver()
         // std::cout << m_ID << "  " << error << " " << m_vehstates[(*ptr)->m_ID].m_genTime << std::endl;
 
         int ind1, ind2;
-        switch (int(distance/50.0))
-        {
-        case 0:
-            ind1 = 0;
-            break;
-        case 1:
-            ind1 = 1;
-            break;
-        case 2:
-            ind1 = 2;
-            break;
-        case 3:
-            ind1 = 3;
-            break;
-        default:
-            ind1 = 4;
-            break;
-        }
+        ind1 = int(distance/50.0);
+        ind1 = (ind1 <= 4) ? ind1 : 4;
+        // switch (int(distance/50.0))
+        // {
+        // case 0:
+        //     ind1 = 0;
+        //     break;
+        // case 1:
+        //     ind1 = 1;
+        //     break;
+        // case 2:
+        //     ind1 = 2;
+        //     break;
+        // case 3:
+        //     ind1 = 3;
+        //     break;
+        // default:
+        //     ind1 = 4;
+        //     break;
+        // }
         switch ( aoi / 10 )
         {
             case 0:
@@ -569,6 +584,11 @@ CutInMobilityModel::CalculateAoIOver()
             for (int j = 0; j < ind2; j++)
                 AoIOverNum[i][j]++;
         }
+    
+        int ind3 = aoi / 20;
+        ind3 = (ind3 <= 6) ? ind3 : 6;
+        if (distance < 150.0)
+            AoIRation[ind3] ++;
     }
 }
 
@@ -582,7 +602,9 @@ CutInMobilityModel::PrintAoIOverRate(ns3::Ptr<ns3::OutputStreamWrapper> log_stre
         for (int j = 0; j < 5; j++)
             *log_stream -> GetStream() << AoIOverNum[i][j] << "  " << AoITotalNum[i] << std::endl;
     }
-
+    for (int i = 0; i < 7; i++)
+        *log_stream -> GetStream() << AoIRation[i] << "  ";
+    *log_stream -> GetStream() << std::endl;
 }
 
 void CutInMobilityModel::PrintPositionErrorRate(ns3::Ptr<ns3::OutputStreamWrapper> log_stream)
@@ -594,6 +616,9 @@ void CutInMobilityModel::PrintPositionErrorRate(ns3::Ptr<ns3::OutputStreamWrappe
         for (int j = 0; j < 5; j++)
             *log_stream -> GetStream() << PositionError[i][j] << "  " << PositionErrorCount[i] << std::endl;
     }
+    for (int i = 0; i < 11; i++)
+        *log_stream -> GetStream() << PosErrRatio[i] << "  ";
+    *log_stream -> GetStream() << std::endl;
 }
 
 }
