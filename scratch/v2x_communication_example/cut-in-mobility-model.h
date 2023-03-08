@@ -127,6 +127,9 @@ public:
     static int AoIOverNum[4][5];
     static int AoITotalNum[4];
 
+    static int AoIRation[7];
+    static int PosErrRatio[11];
+
 public:
     // constructor & destructor
     CutInMobilityModel ();

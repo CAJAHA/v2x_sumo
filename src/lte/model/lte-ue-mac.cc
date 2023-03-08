@@ -3241,10 +3241,18 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 
 		if (ind > 3) // map(RB) is in selection window
 		{
+			// if (sensingIt->m_rxInfo.rbStart == 2)
+			// 	ind = (ind - 3) * 2 - 2;
+			// else
+			// 	ind = (ind - 3) * 2 - 1;
+
 			if (sensingIt->m_rxInfo.rbStart == 2)
-				ind = (ind - 3) * 2 - 2;
+				ind = (ind - 3) * 3 - 3;
+			else if (sensingIt->m_rxInfo.rbStart == 12)
+				ind = (ind - 3) * 3 - 2;
 			else
-				ind = (ind - 3) * 2 - 1;
+				ind = (ind - 3) * 3 - 1;
+
 
 			NS_ASSERT(ind < numCsr);
 			++data_table[ind].recv_num;
