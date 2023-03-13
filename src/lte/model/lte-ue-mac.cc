@@ -3260,7 +3260,7 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 			data_table[ind].rssi_acc += sensingIt->m_slRssi;
 		
 			int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
-			data_table[ind].occupy = (subframe_surplus <= 100);
+			data_table[ind].occupy = (subframe_surplus <= 20);
 		}
 
 

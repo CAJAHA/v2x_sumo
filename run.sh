@@ -1,4 +1,4 @@
-for infVeh in 0 20 40
+for infVeh in 40
 do
     for run in 1 2 3 4 5 
     do
