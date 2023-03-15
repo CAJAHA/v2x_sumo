@@ -115,7 +115,7 @@ public:
    * \param rbLen the length of transmitted data
    * \param rsrpVal the measured RSRP value over the used resource blocks
    */
-  virtual void PassSensingData (uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi) = 0;
+  virtual void PassSensingData (uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr) = 0;
 };
 
 

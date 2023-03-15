@@ -223,7 +223,7 @@ struct SciListElementV2x
   uint8_t m_sfGap;                    // time gap between initial transmission and retransmission - 4 bits
   uint8_t m_mcs;                      // modulation and coding scheme - 5 bits
   uint8_t m_reTxIdx;                  // retransmission index - 1 bit
-  
+  uint8_t m_reselCtr;
   uint16_t m_resPscch;           // added for modelling: resource where PSCCH occur (in subchannel)
   uint16_t m_tbSize;                  // added for modelling: transferblock size
 };

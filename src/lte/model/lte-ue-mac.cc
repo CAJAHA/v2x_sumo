@@ -308,7 +308,7 @@ public:
   virtual void SubframeIndication (uint32_t frameNo, uint32_t subframeNo);
   virtual void ReceiveLteControlMessage (Ptr<LteControlMessage> msg);
   virtual void NotifyChangeOfTiming (uint32_t frameNo, uint32_t subframeNo);
-  virtual void PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi); 
+  virtual void PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr); 
 
 private:
   LteUeMac* m_mac; ///< the UE MAC
@@ -344,9 +344,9 @@ UeMemberLteUePhySapUser::NotifyChangeOfTiming (uint32_t frameNo, uint32_t subfra
 }
 
 void 
-UeMemberLteUePhySapUser::PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi)
+UeMemberLteUePhySapUser::PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr)
 {
-	m_mac->DoPassSensingData (frameNo, subframeNo, pRsvp, rbStart, rbLen, prio, slRsrp, slRssi);
+	m_mac->DoPassSensingData (frameNo, subframeNo, pRsvp, rbStart, rbLen, prio, slRsrp, slRssi, reselCtr);
 }
 
 
@@ -4047,6 +4047,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 			sci1.m_reTxIdx = poolIt2->second.m_currentGrant.m_reTxIdx; 
 			sci1.m_tbSize = poolIt2->second.m_currentGrant.m_tbSize; 
 			sci1.m_resPscch = poolIt2->second.m_currentGrant.m_resPscch; 
+			sci1.m_reselCtr = m_reselCtr;
 
 			Ptr<SciLteControlMessageV2x> msg = Create<SciLteControlMessageV2x> (); 
 			msg->SetSci (sci1); 
@@ -4203,7 +4204,7 @@ LteUeMac::DoRemoveSlDestination (uint32_t destination)
 }
 
 void 
-LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi)
+LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr)
 {
 	SensingData sensingData;
 	sensingData.m_rxInfo.rbStart = rbStart;
@@ -4212,6 +4213,7 @@ LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsv
 	sensingData.m_prioRx = prio; 
 	sensingData.m_slRsrp = slRsrp;
 	sensingData.m_slRssi = slRssi; 
+	sensingData.m_reselCtr = reselCtr;
 
 	if (frameNo == 1 && subframeNo == 1)
 	{
