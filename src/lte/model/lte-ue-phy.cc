@@ -1212,6 +1212,7 @@ LteUePhy::ReceiveLteControlMessageList (std::list<Ptr<LteControlMessage> > msgLi
               txInfo.m_grant.m_reTxIdx = sci1.m_reTxIdx; 
               txInfo.m_grant.m_tbSize = sci1.m_tbSize; 
               txInfo.m_grant.m_resPscch = sci1.m_resPscch;  
+              txInfo.m_grant.m_reselCtr = sci1.m_reselCtr; 
 
               // insert grant
               NS_LOG_LOGIC (this << " insert grant for rnti " << sci1.m_rnti << " with size " << sci1.m_tbSize);
@@ -1514,7 +1515,7 @@ LteUePhy::SubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 
                   double slRsrp_dBm = GetSidelinkRsrp(m_sidelinkSpectrumPhy->GetSlSignalPerceived()); 
                   double slRssi_dBm = GetSidelinkRssi(m_sidelinkSpectrumPhy->GetSlSignalPerceived(), m_sidelinkSpectrumPhy->GetSlInterferencePerceived());
-                  m_uePhySapUser->PassSensingData(frameNo, subframeNo, grantIt->second.m_grant.m_pRsvp, grantIt->second.m_psschTx.begin()->rbStart, grantIt->second.m_psschTx.begin()->rbLen, grantIt->second.m_grant.m_prio, slRsrp_dBm, slRssi_dBm); 
+                  m_uePhySapUser->PassSensingData(frameNo, subframeNo, grantIt->second.m_grant.m_pRsvp, grantIt->second.m_psschTx.begin()->rbStart, grantIt->second.m_psschTx.begin()->rbLen, grantIt->second.m_grant.m_prio, slRsrp_dBm, slRssi_dBm, grantIt->second.m_grant.m_reselCtr); 
 
                   grantIt->second.m_grant_received = false;
                 }

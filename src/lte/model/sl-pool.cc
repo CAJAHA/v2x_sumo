@@ -1025,7 +1025,7 @@ namespace ns3 {
             txInfo.push_back(first); 
           }
         }
-        else
+        else if (first.rbStart == 10)
         {
           // adjacent, no retransmission 
           for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
@@ -1044,6 +1044,27 @@ namespace ns3 {
             first.subframe.subframeNo++;
             if (first.subframe.subframeNo == 11)
               first.subframe.subframeNo = 1;
+          }
+        }
+        else
+        {
+          // adjacent, no retransmission 
+          for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
+          {
+            first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
+            if (first.subframe.frameNo > 2048) 
+            {
+              first.subframe.frameNo -= 2048; 
+            }
+            else if (first.subframe.frameNo > 1024) 
+            {
+              first.subframe.frameNo -= 1024; 
+            }
+            txInfo.push_back(first); 
+
+            first.subframe.subframeNo+=2;
+            if (first.subframe.subframeNo > 10)
+              first.subframe.subframeNo-=10;
           }
         }
       }
@@ -1294,7 +1315,7 @@ namespace ns3 {
             txInfo.push_back(first); 
           }
         }
-        else
+        else if (first.rbStart == 12)
         {
           // adjacent, no retransmission 
           for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
@@ -1313,6 +1334,27 @@ namespace ns3 {
             first.subframe.subframeNo++;
             if (first.subframe.subframeNo == 11)
               first.subframe.subframeNo = 1;
+          }
+        }
+        else
+        {
+          // adjacent, no retransmission 
+          for (uint8_t ctr = 0; ctr < reselCtr; ctr++)
+          {
+            first.subframe.frameNo = subframe.frameNo + ctr*pRsvp/10; 
+            if (first.subframe.frameNo > 2048) 
+            {
+              first.subframe.frameNo -= 2048; 
+            }
+            else if (first.subframe.frameNo > 1024) 
+            {
+              first.subframe.frameNo -= 1024; 
+            }
+            txInfo.push_back(first); 
+
+            first.subframe.subframeNo+=2;
+            if (first.subframe.subframeNo > 10)
+              first.subframe.subframeNo -= 10;
           }
         }
       }

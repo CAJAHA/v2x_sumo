@@ -1,6 +1,6 @@
-for infVeh in 0 20 
+for infVeh in 40 0 20
 do
-    for run in 1 2 3 4 5 
+    for run in 1 2 3 4 5
     do
         c="v2x_communication_example --infVehNum=${infVeh} --run=${run}"
         echo $c

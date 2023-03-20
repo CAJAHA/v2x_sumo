@@ -308,7 +308,7 @@ public:
   virtual void SubframeIndication (uint32_t frameNo, uint32_t subframeNo);
   virtual void ReceiveLteControlMessage (Ptr<LteControlMessage> msg);
   virtual void NotifyChangeOfTiming (uint32_t frameNo, uint32_t subframeNo);
-  virtual void PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi); 
+  virtual void PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr); 
 
 private:
   LteUeMac* m_mac; ///< the UE MAC
@@ -344,9 +344,9 @@ UeMemberLteUePhySapUser::NotifyChangeOfTiming (uint32_t frameNo, uint32_t subfra
 }
 
 void 
-UeMemberLteUePhySapUser::PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi)
+UeMemberLteUePhySapUser::PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr)
 {
-	m_mac->DoPassSensingData (frameNo, subframeNo, pRsvp, rbStart, rbLen, prio, slRsrp, slRssi);
+	m_mac->DoPassSensingData (frameNo, subframeNo, pRsvp, rbStart, rbLen, prio, slRsrp, slRssi, reselCtr);
 }
 
 
@@ -492,8 +492,10 @@ LteUeMac::LteUeMac ()
      m_slBsrPeriodicity (MilliSeconds (1)),
      m_slBsrLast (MilliSeconds (0)),
      m_freshSlBsr (false),
-     m_UlScheduler ("ns3::RrFfMacScheduler") // UE scheduler initialization
-
+     m_UlScheduler ("ns3::RrFfMacScheduler"), // UE scheduler initialization
+	 m_sensingData { 0 },
+	 m_t (0),
+	 m_sc (0)
   
 {
   NS_LOG_FUNCTION (this);
@@ -3095,29 +3097,41 @@ LteUeMac::GetSlThresPsschRsrpVal(uint8_t a, uint8_t b)
 void 
 LteUeMac::UpdateSensingWindow(SidelinkCommResourcePoolV2x::SubframeInfo subframe)
 {
-	std::list<SensingData>::iterator it = m_sensingData.begin();
-	while (it != m_sensingData.end())
-	{	
-		uint32_t tmpFrameNo = it->m_rxInfo.subframe.frameNo + 100; 
-		if (tmpFrameNo > 1024)
-		{	
-			// if frameNo+100 is here less than 1024 a new superframe is already started
-			// but the beginning of the sensing window is still in the last superframe
-			if((subframe.frameNo + 100) < 1024) {
-				tmpFrameNo -= 1024; 	
-			}
-		}
+	// if (m_rnti == 1)
+		// std::cout << m_rnti << " update sensing window at {" << subframe.frameNo << ", " << subframe.subframeNo << "}\n" ; 
+	
+    // std::cout << m_rnti << " update sensing window at {" << subframe.frameNo << ", " << subframe.subframeNo << "}\n" ; 
 
-		// check if the actual data is still in the sensing window
-		// if true the data is outside the sensing window and have to be removed
-		// if false iterate next sensed element
-		if (tmpFrameNo < subframe.frameNo || ((tmpFrameNo == subframe.frameNo) && (it->m_rxInfo.subframe.subframeNo < subframe.subframeNo))){
-			it = m_sensingData.erase(it); 
-		}
-		else {
-			it++;
-		}
-	}
+	// std::list<SensingData>::iterator it = m_sensingData.begin();
+	// while (it != m_sensingData.end())
+	// {	
+	// 	uint32_t tmpFrameNo = it->m_rxInfo.subframe.frameNo + 100; 
+	// 	if (tmpFrameNo > 1024)
+	// 	{	
+	// 		// if frameNo+100 is here less than 1024 a new superframe is already started
+	// 		// but the beginning of the sensing window is still in the last superframe
+	// 		if((subframe.frameNo + 100) < 1024) {
+	// 			tmpFrameNo -= 1024; 	
+	// 		}
+	// 	}
+
+	// 	// check if the actual data is still in the sensing window
+	// 	// if true the data is outside the sensing window and have to be removed
+	// 	// if false iterate next sensed element
+	// 	if (tmpFrameNo < subframe.frameNo || ((tmpFrameNo == subframe.frameNo) && (it->m_rxInfo.subframe.subframeNo < subframe.subframeNo))){
+	// 		it = m_sensingData.erase(it); 
+	// 	}
+	// 	else {
+	// 		it++;
+	// 	}
+	// }
+	
+	m_t++;
+	m_t = (m_t == 1000) ? (0) : (m_t);
+	for (int i = 0; i < 3; i++)
+		m_sensingData[m_t][i].m_valid = false;
+	m_sc = 0;
+
 }
 
 std::list<LteUeMac::SidelinkTransmissionInfoExtended>
@@ -3220,107 +3234,258 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 	
 	// double PowerArray[numCsr][3] = {0};
 	SPS_DATA_TABLE_ENTRY data_table[numCsr] = {0};
-	int ind;
-	int tempA, tempB;
-	int delta, offset, sf;
-	for (std::list<SensingData>::iterator sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); sensingIt++)
+	int tempA, tempB, tempC, FinW, SFinW;
+	bool comm_odd;
+	int offset_per_time;
+	int ind1, ind2;
+	// std::list<SensingData>::iterator sensingIt, last_sd;
+
+	SensingData* sensingIt;
+	for (int t = 0; t < 1000; t++)
 	{
-		if (sensingIt->m_rxInfo.rbStart == 2)
+		for (int sc = 0; sc < 3; sc++)
+		{
+			sensingIt = &(m_sensingData[t][sc]);
+			if (!sensingIt->m_valid)
+				continue;
+
+			offset_per_time = sensingIt->m_rxInfo.rbStart / 10;
+			ind1 = 0, ind2 = 0;
+
+			// NS_ASSERT((subframe.frameNo != sensingIt->m_rxInfo.subframe.frameNo) || (sensingIt->m_rxInfo.subframe.subframeNo != subframe.subframeNo));
+
+			if (!offset_per_time)
+			{
+				tempA = subframe.frameNo -  sensingIt->m_rxInfo.subframe.frameNo;
+				tempB = sensingIt->m_rxInfo.subframe.subframeNo - subframe.subframeNo;
+				if (std::abs(tempA) % 2)
+				{
+					ind1 = tempB + 10 ;
+				}
+				else
+				{
+					if (tempB > 0)
+						ind1 = tempB;
+					else
+						ind1 = tempB + 20;
+				}
+
+				NS_ASSERT((ind1 >=1) && (ind1 <= 20));
+
+				if (ind1 > 3) // map(RB) is in selection window
+				{
+					ind1 = (ind1 - 3) * 3 - 3;
+
+					NS_ASSERT(ind1 < numCsr);
+					++data_table[ind1].recv_num;
+					data_table[ind1].rsrp_acc += sensingIt->m_slRsrp;
+					data_table[ind1].rssi_acc += sensingIt->m_slRssi;
+				
+					int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
+					int num_in_win = 1 + subframe_surplus/20;
+					data_table[ind1].occupy = ((num_in_win <= sensingIt->m_reselCtr) || data_table[ind1].occupy);
+					// data_table[ind1].occupy = true;
+				}
+
+				continue;
+			}
+
+			comm_odd = !((subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo) % 2);
+
+			if (!comm_odd)
+				tempA = subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo;
+			else if (subframe.frameNo == sensingIt->m_rxInfo.subframe.frameNo)
+				tempA = 0;
+			else
+				tempA = subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo - 2;
+
+			tempA = (tempA >= 0) ? tempA : (1024 + tempA);
+			tempA /= 2;
+
+			bool ind1_occupy=false, ind2_occupy=false;
+
+			if (!comm_odd)
+			{
+				FinW = sensingIt->m_rxInfo.subframe.frameNo + 2*tempA + 2;
+				FinW = (FinW <= 1024) ? FinW : (FinW - 1024);
+				SFinW = (sensingIt->m_rxInfo.subframe.subframeNo + offset_per_time*(tempA + 1)) % 10;
+				SFinW = (SFinW == 0) ? 10 : SFinW;
+
+				tempC = FinW-subframe.frameNo;
+				tempC = (tempC >= 0) ? tempC : (1024 + tempC);
+				ind1 = 10*tempC + (SFinW-subframe.subframeNo);
+				ind1_occupy = (tempA+1) <= sensingIt->m_reselCtr;
+			}
+			else
+			{
+				FinW = sensingIt->m_rxInfo.subframe.frameNo + 2*tempA + 2;
+				FinW = (FinW <= 1024) ? FinW : (FinW - 1024);
+				SFinW = (sensingIt->m_rxInfo.subframe.subframeNo + offset_per_time*(tempA + 1)) % 10;
+				SFinW = (SFinW == 0) ? 10 : SFinW;
+
+				tempC = FinW-subframe.frameNo;
+				tempC = (tempC >= 0) ? tempC : (1024 + tempC);
+				ind1 = 10*tempC + (SFinW-subframe.subframeNo);
+				ind1_occupy = (tempA+1) <= sensingIt->m_reselCtr;
+
+				FinW += 2;
+				FinW = (FinW <= 1024) ? FinW : (FinW - 1024);
+				SFinW = (SFinW + offset_per_time) % 10;
+				SFinW = (SFinW == 0) ? 10 : SFinW;
+
+				tempC = FinW-subframe.frameNo;
+				tempC = (tempC >= 0) ? tempC : (1024 + tempC);
+				ind2 = 10*tempC + (SFinW-subframe.subframeNo);
+				ind2_occupy = (tempA+2) <= sensingIt->m_reselCtr;
+			}
+
+			NS_ASSERT((ind1 >= -10) && (ind1 <= 40));
+			NS_ASSERT((ind2 >= 0) && (ind2 <= 40));
+
+			if ((ind1 >= 4) && (ind1 <= 20))
+			{
+				ind1 = (ind1 - 4)*3 + offset_per_time;
+				++data_table[ind1].recv_num;
+				data_table[ind1].rsrp_acc += sensingIt->m_slRsrp;
+				data_table[ind1].rssi_acc += sensingIt->m_slRssi;
+
+				data_table[ind1].occupy = (ind1_occupy || data_table[ind1].occupy);
+				// data_table[ind1].occupy = true;
+			}
+				
+
+			if ((ind2 >= 4) && (ind2 <= 20))
+			{
+				ind2 = (ind2 - 4)*3 + offset_per_time;
+				++data_table[ind2].recv_num;
+				data_table[ind2].rsrp_acc += sensingIt->m_slRsrp;
+				data_table[ind2].rssi_acc += sensingIt->m_slRssi;
+
+				data_table[ind2].occupy = (ind2_occupy || data_table[ind2].occupy);
+				// data_table[ind2].occupy = true;
+			}
+		}
+	}
+
+/*
+	for (sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); sensingIt++)
+	{
+
+		last_sd = sensingIt;
+
+		offset_per_time = sensingIt->m_rxInfo.rbStart / 10;
+		ind1 = 0, ind2 = 0;
+
+		// NS_ASSERT((subframe.frameNo != sensingIt->m_rxInfo.subframe.frameNo) || (sensingIt->m_rxInfo.subframe.subframeNo != subframe.subframeNo));
+
+		if (!offset_per_time)
 		{
 			tempA = subframe.frameNo -  sensingIt->m_rxInfo.subframe.frameNo;
 			tempB = sensingIt->m_rxInfo.subframe.subframeNo - subframe.subframeNo;
 			if (std::abs(tempA) % 2)
 			{
-				ind = tempB + 10 ;
+				ind1 = tempB + 10 ;
 			}
 			else
 			{
 				if (tempB > 0)
-					ind = tempB;
+					ind1 = tempB;
 				else
-					ind = tempB + 20;
+					ind1 = tempB + 20;
 			}
 
-			NS_ASSERT((ind >=1) && (ind <= 20));
+			NS_ASSERT((ind1 >=1) && (ind1 <= 20));
 
-			if (ind > 3)
+			if (ind1 > 3) // map(RB) is in selection window
 			{
-				ind = (ind-3)*2-2;
-				NS_ASSERT(ind < numCsr);
-				++data_table[ind].recv_num;
-				data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
-				data_table[ind].rssi_acc += sensingIt->m_slRssi;
+				ind1 = (ind1 - 3) * 3 - 3;
+
+				NS_ASSERT(ind1 < numCsr);
+				++data_table[ind1].recv_num;
+				data_table[ind1].rsrp_acc += sensingIt->m_slRsrp;
+				data_table[ind1].rssi_acc += sensingIt->m_slRssi;
 			
 				int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
-				data_table[ind].occupy = (subframe_surplus <= 100);
+				data_table[ind1].occupy = (subframe_surplus <= 100);
+				// data_table[ind1].occupy = true;
 			}
+
+			continue;
+		}
+
+		comm_odd = !((subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo) % 2);
+
+		if (!comm_odd)
+			tempA = subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo;
+		else if (subframe.frameNo == sensingIt->m_rxInfo.subframe.frameNo)
+			tempA = 0;
+		else
+			tempA = subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo - 2;
+
+		tempA = (tempA >= 0) ? tempA : (1024 + tempA);
+		tempA /= 2;
+
+		if (!comm_odd)
+		{
+			FinW = sensingIt->m_rxInfo.subframe.frameNo + 2*tempA + 2;
+			FinW = (FinW <= 1024) ? FinW : (FinW - 1024);
+			SFinW = (sensingIt->m_rxInfo.subframe.subframeNo + offset_per_time*(tempA + 1)) % 10;
+			SFinW = (SFinW == 0) ? 10 : SFinW;
+
+			tempC = FinW-subframe.frameNo;
+			tempC = (tempC >= 0) ? tempC : (1024 + tempC);
+			ind1 = 10*tempC + (SFinW-subframe.subframeNo);
 		}
 		else
 		{
-			delta = subframe.frameNo - sensingIt->m_rxInfo.subframe.frameNo;
-			delta = (delta<0)? (delta+1024) : delta;
-			offset = (delta%20) / 2;
+			FinW = sensingIt->m_rxInfo.subframe.frameNo + 2*tempA + 2;
+			FinW = (FinW <= 1024) ? FinW : (FinW - 1024);
+			SFinW = (sensingIt->m_rxInfo.subframe.subframeNo + offset_per_time*(tempA + 1)) % 10;
+			SFinW = (SFinW == 0) ? 10 : SFinW;
 
-			if (delta%2)
-			{
-				sf = (sensingIt->m_rxInfo.subframe.subframeNo + offset + 1) % 10;
-				sf = sf ? sf : 10;
-				ind = 10 - subframe.subframeNo + sf;
+			tempC = FinW-subframe.frameNo;
+			tempC = (tempC >= 0) ? tempC : (1024 + tempC);
+			ind1 = 10*tempC + (SFinW-subframe.subframeNo);
 
-				if (ind > 3)
-				{
-					ind = (ind - 3) * 2 - 1;
-					NS_ASSERT(ind < numCsr);
-					++data_table[ind].recv_num;
-					data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
-					data_table[ind].rssi_acc += sensingIt->m_slRssi;
-				
-					int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
-					data_table[ind].occupy = (subframe_surplus <= 100);
-				}
-			}
-			else
-			{
-				sf = (sensingIt->m_rxInfo.subframe.subframeNo + offset) % 10;
-				sf = sf ? sf : 10;
-				if (sf > (int)subframe.subframeNo)
-				{
-					ind = sf - subframe.subframeNo;
-					if (ind > 3)
-					{
-						ind = (ind - 3) * 2 - 1;
-						NS_ASSERT(ind < numCsr);
-						++data_table[ind].recv_num;
-						data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
-						data_table[ind].rssi_acc += sensingIt->m_slRssi;
-					
-						int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
-						data_table[ind].occupy = (subframe_surplus <= 100);
-					}
-				}
+			FinW += 2;
+			FinW = (FinW <= 1024) ? FinW : (FinW - 1024);
+			SFinW = (SFinW + offset_per_time) % 10;
+			SFinW = (SFinW == 0) ? 10 : SFinW;
 
-				sf = (sensingIt->m_rxInfo.subframe.subframeNo + offset + 1) % 10;
-				sf = sf ? sf : 10;
-				if (sf <= (int)subframe.subframeNo)
-				{
-					ind = 10 + (10 - subframe.subframeNo) + sf;
-					if (ind > 3)
-					{
-						ind = (ind - 3) * 2 - 1;
-						NS_ASSERT(ind < numCsr);
-						++data_table[ind].recv_num;
-						data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
-						data_table[ind].rssi_acc += sensingIt->m_slRssi;
-					
-						int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
-						data_table[ind].occupy = (subframe_surplus <= 100);
-					}
-				}
-
-			}
+			tempC = FinW-subframe.frameNo;
+			tempC = (tempC >= 0) ? tempC : (1024 + tempC);
+			ind2 = 10*tempC + (SFinW-subframe.subframeNo);
 		}
 
+		NS_ASSERT((ind1 >= -10) && (ind1 <= 40));
+		NS_ASSERT((ind2 >= 0) && (ind2 <= 40));
+
+		if ((ind1 >= 4) && (ind1 <= 20))
+		{
+			ind1 = (ind1 - 4)*3 + offset_per_time;
+			++data_table[ind1].recv_num;
+			data_table[ind1].rsrp_acc += sensingIt->m_slRsrp;
+			data_table[ind1].rssi_acc += sensingIt->m_slRssi;
+
+			data_table[ind1].occupy = (tempA < 5);
+			// data_table[ind1].occupy = true;
+		}
+			
+
+		if ((ind2 >= 4) && (ind2 <= 20))
+		{
+			ind2 = (ind2 - 4)*3 + offset_per_time;
+			++data_table[ind2].recv_num;
+			data_table[ind2].rsrp_acc += sensingIt->m_slRsrp;
+			data_table[ind2].rssi_acc += sensingIt->m_slRssi;
+
+			data_table[ind2].occupy = (tempA < 5);
+			// data_table[ind2].occupy = true;
+		}
+			
 	}
+	*/
+
 
 
 	// calculate the average rsrp and rssi
@@ -3912,7 +4077,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 	SidelinkCommResourcePoolV2x::SubframeInfo tmp; 
 	tmp.frameNo = frameNo; 
 	tmp.subframeNo = subframeNo; 
-	UpdateSensingWindow(tmp); 
+	// UpdateSensingWindow(tmp); 
 
 	if (rndmStart != 0) {
 		rndmStart--; // decrease counter until the value is equal to zero
@@ -4111,6 +4276,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 			sci1.m_reTxIdx = poolIt2->second.m_currentGrant.m_reTxIdx; 
 			sci1.m_tbSize = poolIt2->second.m_currentGrant.m_tbSize; 
 			sci1.m_resPscch = poolIt2->second.m_currentGrant.m_resPscch; 
+			sci1.m_reselCtr = m_reselCtr;
 
 			Ptr<SciLteControlMessageV2x> msg = Create<SciLteControlMessageV2x> (); 
 			msg->SetSci (sci1); 
@@ -4227,6 +4393,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 			poolIt2->second.m_psschTx.erase (allocItPssch);
 		}
 	}
+	UpdateSensingWindow(tmp); 
 }
 
 int64_t
@@ -4267,7 +4434,7 @@ LteUeMac::DoRemoveSlDestination (uint32_t destination)
 }
 
 void 
-LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi)
+LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr)
 {
 	SensingData sensingData;
 	sensingData.m_rxInfo.rbStart = rbStart;
@@ -4276,6 +4443,8 @@ LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsv
 	sensingData.m_prioRx = prio; 
 	sensingData.m_slRsrp = slRsrp;
 	sensingData.m_slRssi = slRssi; 
+	sensingData.m_valid = true;
+	sensingData.m_reselCtr = reselCtr;
 
 	if (frameNo == 1 && subframeNo == 1)
 	{
@@ -4292,7 +4461,12 @@ LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsv
 		sensingData.m_rxInfo.subframe.frameNo = frameNo;
 		sensingData.m_rxInfo.subframe.subframeNo = subframeNo-1;
 	}
-	m_sensingData.push_back(sensingData);
+	// m_sensingData.push_back(sensingData);
+	m_sensingData[m_t][m_sc] = sensingData;
+	m_sc++;
+	NS_ASSERT((m_t >= 0) && (m_t <= 999));
+	NS_ASSERT((m_sc >= 1) && (m_sc <= 3));
+	NS_ASSERT((sensingData.m_reselCtr <= 74) && (sensingData.m_reselCtr>=0));
 }
 
 void

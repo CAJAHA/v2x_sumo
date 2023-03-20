@@ -205,7 +205,7 @@ main (int argc, char *argv[])
     bool adjacencyPscchPssch = true;        // Subchannelization scheme
     bool partialSensing = false;            // Partial sensing enabled (actual only partialSensing is false supported)
     uint16_t sizeSubchannel = 10;           // Number of RBs per subchannel
-    uint16_t numSubchannel = 2;             // Number of subchannels per subframe
+    uint16_t numSubchannel = 3;             // Number of subchannels per subframe
     uint16_t startRbSubchannel = 0;         // Index of first RB corresponding to subchannelization
     uint16_t pRsvp = 20;				    // Resource reservation interval 
     uint16_t t1 = 4;                        // T1 value of selection window
