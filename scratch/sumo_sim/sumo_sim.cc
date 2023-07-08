@@ -352,7 +352,7 @@ main (int argc, char *argv[])
         end = std::clock();
         std::cout << (double)(end - start) / CLOCKS_PER_SEC << std::endl;
 
-        std::string average_pos_err = "./simulation_results/" + std::to_string(VehicleNum) + "_results";
+        std::string average_pos_err = "./simulation_results/standard_protocol_" + std::to_string(VehicleNum) + "_results";
         AsciiTraceHelper ascii;
         Ptr<ns3::OutputStreamWrapper> position_error = ascii.CreateFileStream(average_pos_err);
         SUMOMobilityModel::SaveResults(position_error);
