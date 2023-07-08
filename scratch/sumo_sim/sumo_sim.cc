@@ -357,5 +357,13 @@ main (int argc, char *argv[])
         Ptr<ns3::OutputStreamWrapper> position_error = ascii.CreateFileStream(average_pos_err);
         SUMOMobilityModel::SaveResults(position_error);
 
+        *position_error -> GetStream() << "------------------------------ \n";
+        *position_error -> GetStream() << "PDR: " << std::endl;
+        *position_error -> GetStream() << "------------------------------ \n";
+        std::for_each(TX_RX.begin(), TX_RX.end(), [&](std::pair<int64_t, int64_t> TRpair){
+            *position_error->GetStream() << TRpair.first / static_cast<double>(TRpair.second) << std::endl;
+        });
+
+        SUMOMobilityModel::CloseSUMO();
         return 0;  
 }   

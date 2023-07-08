@@ -5,6 +5,7 @@
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"
 #include "ns3/output-stream-wrapper.h"
+#include <libsumo/libtraci.h>
 #include <map>
 #include <cstdint>
 #include <memory>
@@ -34,9 +35,10 @@ public:
   static void SUMOMobilityModelSchedule(int64_t start_time);
   static const std::map<uint32_t, Vector>& GetAllVehiclePosition() {return AllVehiclePosition;}
   static void SaveResults(ns3::Ptr<ns3::OutputStreamWrapper> log_stream);
+  static void CloseSUMO(){libtraci::Simulation::close();}
 
   SUMOMobilityModel (){}
-  virtual ~SUMOMobilityModel () {}
+  virtual ~SUMOMobilityModel ();
   void BindToSUMO(uint32_t id);
   V2X_PACKET GeneratePacket() const;
   void SavePacket(const V2X_PACKET pkt);
@@ -56,7 +58,7 @@ private:
   static void CallSUMOStep();
   static std::vector<std::vector<int64_t>> AoIRecord;
   static std::vector<std::vector<int64_t>> PosRecord;
-  static std::vector<std::shared_ptr<SUMOMobilityModel>> AllSUMOMobilityModelObj;
+  static std::vector<SUMOMobilityModel*> AllSUMOMobilityModelObj;
 
   //std::map<
 };

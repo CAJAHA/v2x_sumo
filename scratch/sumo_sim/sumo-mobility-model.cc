@@ -26,7 +26,7 @@ std::vector<std::string> SUMOMobilityModel::AllVehicleIDInSUMO;
 std::map<uint32_t, std::string> SUMOMobilityModel::AllVehcileMap;
 std::vector<std::vector<int64_t>> SUMOMobilityModel::AoIRecord {DISLEN, std::vector<int64_t>(AOIRECORDLEN, 0)};
 std::vector<std::vector<int64_t>> SUMOMobilityModel::PosRecord {DISLEN, std::vector<int64_t>(POSRECORDLEN, 0)};
-std::vector<std::shared_ptr<SUMOMobilityModel>> SUMOMobilityModel::AllSUMOMobilityModelObj;
+std::vector<SUMOMobilityModel*> SUMOMobilityModel::AllSUMOMobilityModelObj;
 
 TypeId SUMOMobilityModel::GetTypeId (void)
 {
@@ -56,7 +56,7 @@ void SUMOMobilityModel::SUMOMobilityModelSchedule(int64_t start_time)
   for (auto mob_ptr : AllSUMOMobilityModelObj)
   {
     int64_t rd = static_cast<int64_t>(RV->GetValue(0.0, 100.0));
-    Simulator::Schedule(MilliSeconds(start_time+rd), &SUMOMobilityModel::FakeControl, mob_ptr.get());
+    Simulator::Schedule(MilliSeconds(start_time+rd), &SUMOMobilityModel::FakeControl, mob_ptr);
     for (auto other_ptr : AllSUMOMobilityModelObj)
     {
       mob_ptr->m_SelfBuffer.insert(std::make_pair(other_ptr->m_id.first, V2X_PACKET()));
@@ -104,6 +104,13 @@ void SUMOMobilityModel::SaveResults(ns3::Ptr<ns3::OutputStreamWrapper> log_strea
   }
 }
 
+SUMOMobilityModel::~SUMOMobilityModel()
+{
+  auto it = std::find(AllSUMOMobilityModelObj.begin(), AllSUMOMobilityModelObj.end(), this);
+  AllSUMOMobilityModelObj.erase(it);
+}
+
+
 void SUMOMobilityModel::BindToSUMO(uint32_t id)
 {
   static std::vector<std::string>::iterator _itr = AllVehicleIDInSUMO.begin();
@@ -111,7 +118,7 @@ void SUMOMobilityModel::BindToSUMO(uint32_t id)
   m_id.second = *_itr;
   AllVehcileMap.insert(m_id);
   AllVehiclePosition.insert(std::make_pair(id, Vector(0.0, 0.0, 0.0)));
-  AllSUMOMobilityModelObj.insert(AllSUMOMobilityModelObj.begin(), std::shared_ptr<SUMOMobilityModel>(this));
+  AllSUMOMobilityModelObj.insert(AllSUMOMobilityModelObj.begin(), this);
   _itr++;
 }
 
