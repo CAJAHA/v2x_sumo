@@ -661,6 +661,7 @@ def configure(conf):
             value = shlex.split(os.environ[envvar])
             conf.env.append_value(confvar, value)
 
+    conf.env.append_value("LIB", ["tracicpp"])
     print_config(env)
     
 

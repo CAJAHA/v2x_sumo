@@ -6,7 +6,7 @@
         {
             "label": "Build",
             "type": "shell",
-            "command": "./waf",
+            "command": "python2 ./waf",
             "group": {
                 "kind": "build",
                 "isDefault": true
