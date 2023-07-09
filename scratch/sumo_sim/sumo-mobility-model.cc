@@ -152,7 +152,6 @@ SUMOMobilityModel::CalculateError()
     int64_t aoi, current_time {Simulator::Now().GetMilliSeconds()};
     Vector3D other_position, self_position {AllVehiclePosition.find(m_id.first)->second};
     double poserr, distance;
-    V2X_PACKET v2x_pkt;
     for (auto itr : AllVehiclePosition)
     {
       if (m_id.first == itr.first)
@@ -160,15 +159,15 @@ SUMOMobilityModel::CalculateError()
       
       other_position = itr.second;
       distance = sqrt(pow(self_position.x-other_position.x, 2) + pow(self_position.y-other_position.y, 2));
-      
       if (distance >= DISSTEP * DISLEN)
         continue;
 
-      aoi = current_time - m_SelfBuffer.find(itr.first)->second.m_time;
+      const V2X_PACKET& v2x_pkt = m_SelfBuffer.find(itr.first)->second;
+
+      aoi = current_time - v2x_pkt.m_time;
       int AoIIndex = static_cast<int>(aoi/AOISTEP);
       AoIIndex = (AoIIndex <= AOIRECORDLEN) ? AoIIndex : AOIRECORDLEN;
 
-      v2x_pkt = m_SelfBuffer.find(itr.first)->second;
       poserr = sqrt(
         pow(other_position.x-v2x_pkt.m_x, 2) + 
         pow(other_position.y-v2x_pkt.m_y, 2)
@@ -181,9 +180,10 @@ SUMOMobilityModel::CalculateError()
 
       for(int i = DisIndex; i < DISLEN; i++)
       {
-        for (int j = 0; j < PosIndex; j++)
+        PosRecord[i][0]++, AoIRecord[i][0]++;
+        for (int j = 1; j <= (PosIndex-1); j++)
           PosRecord[i][j]++;
-        for (int j = 0; j < AoIIndex; j++)
+        for (int j = 1; j <= (AoIIndex-1); j++)
           AoIRecord[i][j]++;
       }
     }
