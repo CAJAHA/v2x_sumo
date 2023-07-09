@@ -42,3 +42,4 @@ build/
 /.cproject
 /CHANGES.html
 /.project
+/.cache
