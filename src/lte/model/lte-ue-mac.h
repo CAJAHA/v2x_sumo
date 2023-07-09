@@ -515,7 +515,7 @@ private:
     uint8_t m_sfGap;
     uint8_t m_mcs;
     uint8_t m_reTxIdx;
-    
+
     uint8_t m_resPscch; 
     uint32_t m_tbSize; 
   };
@@ -549,13 +549,18 @@ private:
 
   struct SensingData{
     SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo m_rxInfo;
+    uint8_t m_reselCtr;
     uint8_t m_prioRx; 
     uint16_t m_pRsvpRx; 
     double m_slRsrp;
     double m_slRssi; 
+    bool m_valid;
   };
 
-  std::list<SensingData> m_sensingData; 
+  // std::list<SensingData> m_sensingData; 
+
+  SensingData m_sensingData[1000][3]; // 1000*3
+  int m_t, m_sc;
 
   struct CandidateResource{
     SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo m_txInfo; 
@@ -630,7 +635,7 @@ private:
  void DoNotifyChangeOfTiming (uint32_t frameNo, uint32_t subframeNo);
 
   // The PHY pass the sensing data for SPS to MAC
- void DoPassSensingData (uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi); 
+ void DoPassSensingData (uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr); 
   
   /**
    * Update the sensing window (1000 ms) 

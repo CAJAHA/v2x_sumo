@@ -35,8 +35,7 @@ TAGS
 .lock-waf_*_build
 .waf*
 
-/simulation_results/
-/.cache
+/simulation_results
 
 build-dir/
 build/

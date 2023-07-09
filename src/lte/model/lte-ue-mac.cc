@@ -308,7 +308,7 @@ public:
   virtual void SubframeIndication (uint32_t frameNo, uint32_t subframeNo);
   virtual void ReceiveLteControlMessage (Ptr<LteControlMessage> msg);
   virtual void NotifyChangeOfTiming (uint32_t frameNo, uint32_t subframeNo);
-  virtual void PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi); 
+  virtual void PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr); 
 
 private:
   LteUeMac* m_mac; ///< the UE MAC
@@ -344,9 +344,9 @@ UeMemberLteUePhySapUser::NotifyChangeOfTiming (uint32_t frameNo, uint32_t subfra
 }
 
 void 
-UeMemberLteUePhySapUser::PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi)
+UeMemberLteUePhySapUser::PassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr)
 {
-	m_mac->DoPassSensingData (frameNo, subframeNo, pRsvp, rbStart, rbLen, prio, slRsrp, slRssi);
+	m_mac->DoPassSensingData (frameNo, subframeNo, pRsvp, rbStart, rbLen, prio, slRsrp, slRssi, reselCtr);
 }
 
 
@@ -492,7 +492,10 @@ LteUeMac::LteUeMac ()
      m_slBsrPeriodicity (MilliSeconds (1)),
      m_slBsrLast (MilliSeconds (0)),
      m_freshSlBsr (false),
-     m_UlScheduler ("ns3::RrFfMacScheduler") // UE scheduler initialization
+     m_UlScheduler ("ns3::RrFfMacScheduler"), // UE scheduler initialization
+	 m_sensingData { 0 },
+	 m_t (0),
+	 m_sc (0)
 
   
 {
@@ -3095,29 +3098,34 @@ LteUeMac::GetSlThresPsschRsrpVal(uint8_t a, uint8_t b)
 void 
 LteUeMac::UpdateSensingWindow(SidelinkCommResourcePoolV2x::SubframeInfo subframe)
 {
-	std::list<SensingData>::iterator it = m_sensingData.begin();
-	while (it != m_sensingData.end())
-	{	
-		uint32_t tmpFrameNo = it->m_rxInfo.subframe.frameNo + 100; 
-		if (tmpFrameNo > 1024)
-		{	
-			// if frameNo+100 is here less than 1024 a new superframe is already started
-			// but the beginning of the sensing window is still in the last superframe
-			if((subframe.frameNo + 100) < 1024) {
-				tmpFrameNo -= 1024; 	
-			}
-		}
+	// std::list<SensingData>::iterator it = m_sensingData.begin();
+	// while (it != m_sensingData.end())
+	// {	
+	// 	uint32_t tmpFrameNo = it->m_rxInfo.subframe.frameNo + 100; 
+	// 	if (tmpFrameNo > 1024)
+	// 	{	
+	// 		// if frameNo+100 is here less than 1024 a new superframe is already started
+	// 		// but the beginning of the sensing window is still in the last superframe
+	// 		if((subframe.frameNo + 100) < 1024) {
+	// 			tmpFrameNo -= 1024; 	
+	// 		}
+	// 	}
 
-		// check if the actual data is still in the sensing window
-		// if true the data is outside the sensing window and have to be removed
-		// if false iterate next sensed element
-		if (tmpFrameNo < subframe.frameNo || ((tmpFrameNo == subframe.frameNo) && (it->m_rxInfo.subframe.subframeNo < subframe.subframeNo))){
-			it = m_sensingData.erase(it); 
-		}
-		else {
-			it++;
-		}
-	}
+	// 	// check if the actual data is still in the sensing window
+	// 	// if true the data is outside the sensing window and have to be removed
+	// 	// if false iterate next sensed element
+	// 	if (tmpFrameNo < subframe.frameNo || ((tmpFrameNo == subframe.frameNo) && (it->m_rxInfo.subframe.subframeNo < subframe.subframeNo))){
+	// 		it = m_sensingData.erase(it); 
+	// 	}
+	// 	else {
+	// 		it++;
+	// 	}
+	// }
+	m_t++;
+	m_t = (m_t == 1000) ? (0) : (m_t);
+	for (int i = 0; i < 3; i++)
+		m_sensingData[m_t][i].m_valid = false;
+	m_sc = 0;
 }
 
 std::list<LteUeMac::SidelinkTransmissionInfoExtended>
@@ -3220,6 +3228,60 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 	SPS_DATA_TABLE_ENTRY data_table[numCsr] = {0};
 	// double PowerArray[numCsr][3] = {0};
 	int ind, tempA, tempB;
+
+	// std::list<std::list<SensingData>> 
+	SensingData* sensingIt;
+	for (int i = 0; i < 1000; i++)
+	{
+		for (int j = 0; j < 3; j++)
+		{
+			sensingIt = &(m_sensingData[i][j]);
+			if (!(sensingIt->m_valid))
+				continue;
+
+			tempA = subframe.frameNo -  sensingIt->m_rxInfo.subframe.frameNo;
+			tempB = sensingIt->m_rxInfo.subframe.subframeNo - subframe.subframeNo;
+			if (std::abs(tempA) % 2)
+			{
+				ind = tempB + 10 ;
+			}
+			else
+			{
+				if (tempB > 0)
+					ind = tempB;
+				else
+					ind = tempB + 20;
+			}
+
+			NS_ASSERT((ind >=1) && (ind <= 20));
+
+			if (ind > 3) // map(RB) is in selection window
+			{
+				// if (sensingIt->m_rxInfo.rbStart == 2)
+				// 	ind = (ind - 3) * 2 - 2;
+				// else
+				// 	ind = (ind - 3) * 2 - 1;
+
+				if (sensingIt->m_rxInfo.rbStart == 2)
+					ind = (ind - 3) * 3 - 3;
+				else if (sensingIt->m_rxInfo.rbStart == 12)
+					ind = (ind - 3) * 3 - 2;
+				else
+					ind = (ind - 3) * 3 - 1;
+
+
+				NS_ASSERT(ind < numCsr);
+				++data_table[ind].recv_num;
+				data_table[ind].rsrp_acc += sensingIt->m_slRsrp;
+				data_table[ind].rssi_acc += sensingIt->m_slRssi;
+			
+				int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
+				data_table[ind].occupy = ((subframe_surplus <= 20) || data_table[ind].occupy);
+			}
+		}
+	}
+
+ /*
 	for (std::list<SensingData>::iterator sensingIt = m_sensingData.begin(); sensingIt != m_sensingData.end(); sensingIt++)
 	{
 
@@ -3260,11 +3322,12 @@ LteUeMac::GetTxResources(SidelinkCommResourcePoolV2x::SubframeInfo subframe, Poo
 			data_table[ind].rssi_acc += sensingIt->m_slRssi;
 		
 			int subframe_surplus = 10 * ( (tempA >= 0) ? tempA : (1024-tempA) ) - tempB;
-			data_table[ind].occupy = (subframe_surplus <= 100);
+			data_table[ind].occupy = (subframe_surplus <= 20);
 		}
 
 
 	}
+	 */
 	// calculate the average rsrp and rssi
 	for (int i = 0; i < numCsr; i++)
 	{
@@ -3848,7 +3911,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 	SidelinkCommResourcePoolV2x::SubframeInfo tmp; 
 	tmp.frameNo = frameNo; 
 	tmp.subframeNo = subframeNo; 
-	UpdateSensingWindow(tmp); 
+	// UpdateSensingWindow(tmp); 
 
 	if (rndmStart != 0) {
 		rndmStart--; // decrease counter until the value is equal to zero
@@ -4047,6 +4110,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 			sci1.m_reTxIdx = poolIt2->second.m_currentGrant.m_reTxIdx; 
 			sci1.m_tbSize = poolIt2->second.m_currentGrant.m_tbSize; 
 			sci1.m_resPscch = poolIt2->second.m_currentGrant.m_resPscch; 
+			sci1.m_reselCtr = m_reselCtr;
 
 			Ptr<SciLteControlMessageV2x> msg = Create<SciLteControlMessageV2x> (); 
 			msg->SetSci (sci1); 
@@ -4163,6 +4227,7 @@ LteUeMac::DoSubframeIndication (uint32_t frameNo, uint32_t subframeNo)
 			poolIt2->second.m_psschTx.erase (allocItPssch);
 		}
 	}
+	UpdateSensingWindow(tmp); 
 }
 
 int64_t
@@ -4203,7 +4268,7 @@ LteUeMac::DoRemoveSlDestination (uint32_t destination)
 }
 
 void 
-LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi)
+LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsvp, uint8_t rbStart, uint8_t rbLen, uint8_t prio, double slRsrp, double slRssi, uint8_t reselCtr)
 {
 	SensingData sensingData;
 	sensingData.m_rxInfo.rbStart = rbStart;
@@ -4212,6 +4277,8 @@ LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsv
 	sensingData.m_prioRx = prio; 
 	sensingData.m_slRsrp = slRsrp;
 	sensingData.m_slRssi = slRssi; 
+	sensingData.m_reselCtr = reselCtr;
+	sensingData.m_valid = true;
 
 	if (frameNo == 1 && subframeNo == 1)
 	{
@@ -4228,7 +4295,12 @@ LteUeMac::DoPassSensingData(uint32_t frameNo, uint32_t subframeNo, uint16_t pRsv
 		sensingData.m_rxInfo.subframe.frameNo = frameNo;
 		sensingData.m_rxInfo.subframe.subframeNo = subframeNo-1;
 	}
-	m_sensingData.push_back(sensingData);
+	// m_sensingData.push_back(sensingData);
+
+	m_sensingData[m_t][m_sc] = sensingData;
+	m_sc++;
+	NS_ASSERT((m_t >= 0) && (m_t <= 999));
+	NS_ASSERT((m_sc >= 1) && (m_sc <= 3));
 }
 
 void

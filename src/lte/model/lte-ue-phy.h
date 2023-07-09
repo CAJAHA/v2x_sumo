@@ -822,7 +822,7 @@ private:
     uint8_t m_mcs;
     uint8_t m_reTxIdx;
     uint32_t m_tbSize; 
-
+    uint8_t m_reselCtr;
     uint8_t m_resPscch;  // added for modelling 
     uint32_t frameNo; 
     uint32_t subframeNo;

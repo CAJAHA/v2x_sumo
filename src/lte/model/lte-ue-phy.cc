@@ -1211,11 +1211,12 @@ LteUePhy::ReceiveLteControlMessageList (std::list<Ptr<LteControlMessage> > msgLi
               txInfo.m_grant.m_mcs = sci1.m_mcs; 
               txInfo.m_grant.m_reTxIdx = sci1.m_reTxIdx; 
               txInfo.m_grant.m_tbSize = sci1.m_tbSize; 
-              txInfo.m_grant.m_resPscch = sci1.m_resPscch;  
+              txInfo.m_grant.m_resPscch = sci1.m_resPscch;
+              txInfo.m_grant.m_reselCtr = sci1.m_reselCtr; 
 
               // insert grant
               NS_LOG_LOGIC (this << " insert grant for rnti " << sci1.m_rnti << " with size " << sci1.m_tbSize);
-              poolIt->m_currentGrants.insert (std::pair<uint16_t, SidelinkGrantInfoV2x> (sci1.m_rnti,txInfo));              
+              poolIt->m_currentGrants.insert (std::pair<uint16_t, SidelinkGrantInfoV2x> (sci1.m_rnti,txInfo));              //  接受来自其他的信息，保存在m_sidelinkRxPoolsV2x
             }
         }
       else if (msg->GetMessageType() == LteControlMessage::MIB_SL)
@@ -1511,10 +1512,10 @@ LteUePhy::SubframeIndication (uint32_t frameNo, uint32_t subframeNo)
                       //std::cout << "Rnti=" << m_rnti << "\t PHY PSSCH RX at " << rxIt->subframe.frameNo << "/"<< rxIt->subframe.subframeNo << "\t rbStart=" << (uint32_t) rxIt->rbStart << "\t rbLen=" << (uint32_t) rxIt->rbLen << "\t from rnti=" << grantIt->first <<std::endl;
                       NS_LOG_INFO (this << " PSSCH Rx " << rxIt->subframe.frameNo << "/"<< rxIt->subframe.subframeNo << ": rbStart=" << (uint32_t) rxIt->rbStart << ", rbLen=" << (uint32_t) rxIt->rbLen);
                     }
-
+// 从m_sidelinkRxPoolsV2x读出信息，保存感知信息
                   double slRsrp_dBm = GetSidelinkRsrp(m_sidelinkSpectrumPhy->GetSlSignalPerceived()); 
                   double slRssi_dBm = GetSidelinkRssi(m_sidelinkSpectrumPhy->GetSlSignalPerceived(), m_sidelinkSpectrumPhy->GetSlInterferencePerceived());
-                  m_uePhySapUser->PassSensingData(frameNo, subframeNo, grantIt->second.m_grant.m_pRsvp, grantIt->second.m_psschTx.begin()->rbStart, grantIt->second.m_psschTx.begin()->rbLen, grantIt->second.m_grant.m_prio, slRsrp_dBm, slRssi_dBm); 
+                  m_uePhySapUser->PassSensingData(frameNo, subframeNo, grantIt->second.m_grant.m_pRsvp, grantIt->second.m_psschTx.begin()->rbStart, grantIt->second.m_psschTx.begin()->rbLen, grantIt->second.m_grant.m_prio, slRsrp_dBm, slRssi_dBm, grantIt->second.m_grant.m_reselCtr); 
 
                   grantIt->second.m_grant_received = false;
                 }
@@ -1936,7 +1937,7 @@ LteUePhy::SubframeIndication (uint32_t frameNo, uint32_t subframeNo)
               //if (ctrlMsg.size ()>0 && sciDiscfound)
               if (ctrlMsg.size ()>0)
                 { 
-                  std::list<Ptr<LteControlMessage> >::iterator msgIt = ctrlMsg.begin();
+                  std::list<Ptr<LteControlMessage> >::iterator msgIt = ctrlMsg.begin(); //  获取mac层传下来的控制信息，保存进m_slTxPoolInfoV2x
                   //skiping the MIB-SL if it is the first in the list
                   if((*msgIt)->GetMessageType () != LteControlMessage::SCI_V2X && (*msgIt)->GetMessageType () != LteControlMessage::SL_DISC_MSG)
                     {
@@ -1967,7 +1968,7 @@ LteUePhy::SubframeIndication (uint32_t frameNo, uint32_t subframeNo)
                           grantInfo.m_grant.m_riv = sci1.m_riv;
                           grantInfo.m_grant.m_sfGap = sci1.m_sfGap; 
                           grantInfo.m_grant.m_mcs = sci1.m_mcs;  
-
+                          grantInfo.m_grant.m_reselCtr = sci1.m_reselCtr;
                           grantInfo.m_grant.m_resPscch = sci1.m_resPscch;
                           grantInfo.m_grant.m_tbSize = sci1.m_tbSize;
 
