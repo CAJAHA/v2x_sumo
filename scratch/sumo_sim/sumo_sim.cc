@@ -94,7 +94,10 @@ ReceivePacket(Ptr<Socket> socket)
         double distance = sqrt(pow((v2v_pkt.m_x - posRx.x),2.0)+pow((v2v_pkt.m_y - posRx.y), 2.0));
         int DisIndex = static_cast<int>(distance/DISSTEP);
         DisIndex = (DisIndex <= DISLEN) ? DisIndex : DISLEN;
-        std::for_each(TX_RX.begin()+DisIndex, TX_RX.end(), [](std::pair<uint64_t, uint64_t>& tx_rx){tx_rx.first++;});
+        std::for_each(TX_RX.begin()+DisIndex, TX_RX.end(), [](std::pair<uint64_t, uint64_t>& tx_rx){
+            tx_rx.first++;
+            tx_rx.first = (tx_rx.first > tx_rx.second) ? tx_rx.second : tx_rx.first;
+            });
     }
 }
 
@@ -125,9 +128,9 @@ main (int argc, char *argv[])
     uint16_t sizeSubchannel = 10;           // Number of RBs per subchannel
     uint16_t numSubchannel = 3;             // Number of subchannels per subframe
     uint16_t startRbSubchannel = 0;         // Index of first RB corresponding to subchannelization
-    uint16_t pRsvp = 100;				    // Resource reservation interval 
+    uint16_t pRsvp = 20;				    // Resource reservation interval 
     uint16_t t1 = 4;                        // T1 value of selection window
-    uint16_t t2 = 100;                      // T2 value of selection window
+    uint16_t t2 = 20;                      // T2 value of selection window
     uint16_t slBandwidth;                   // Sidelink bandwidth
     uint32_t VehicleNum;
     NodeContainer VehicleContainer;
