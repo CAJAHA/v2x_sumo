@@ -13,9 +13,11 @@
 #include <arpa/inet.h>
 
 
-#define CLIP_SPEED(speed) ((speed > MAX_SPEED) ? MAX_SPEED : speed)
+// #define CLIP_SPEED(speed) ((speed > MAX_SPEED) ? MAX_SPEED : speed)
+#define CLIP_SPEED(speed) ((speed) < (MIN_SPEED) ? (MIN_SPEED) : ((speed) > (MAX_SPEED) ? (MAX_SPEED) : (speed)))
 
 const double MAX_SPEED = 25.0;
+const double MIN_SPEED = 20.0;
 const double RAID_15 = 15*M_PI/180;
 const double SIN_15 = std::sin(15*M_PI/180);
 const double COS_15 = std::cos(15*M_PI/180);
@@ -23,8 +25,8 @@ const double TAN_15 = std::tan(15*M_PI/180);
 
 const double TWO_LINES_DIST = 200 / COS_15;
 
-const double SENSING_DISTANCE = 100.0;
-const double HEADWAY_TIME = 1.5;
+const double SENSING_DISTANCE = 50.0;
+const double HEADWAY_TIME = 1.0;
 
 const double Z_OF_VEHICLE = 10.0;
 
