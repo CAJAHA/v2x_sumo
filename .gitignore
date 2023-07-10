@@ -40,4 +40,5 @@ build/
 /.cproject
 /.project
 
-simulation_results/*
+simulation_results/
+/.cache/
