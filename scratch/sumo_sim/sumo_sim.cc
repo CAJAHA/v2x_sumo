@@ -1,3 +1,5 @@
+#include "ns3/mobility-model.h"
+#include "ns3/packet.h"
 #include "ns3/simulator.h"
 #include "ns3/internet-module.h"
 #include "ns3/random-direction-2d-mobility-model.h"
@@ -5,175 +7,97 @@
 #include "ns3/lte-module.h"
 #include "ns3/config-store.h"
 #include "ns3/command-line.h"
-#include "cut-in-mobility-model.h"
+#include "sumo-mobility-model.h"
 #include "ns3/rng-seed-manager.h"
 #include "ns3/position-allocator.h"
+#include <algorithm>
 #include <cfloat>
+#include <cstdint>
 #include <sstream>
 #include <ctime>
 #include <iostream>
-
+#include <utility>
+#include <vector>
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("v2x_communication_mode_4");
-
-// Output 
-std::string rx_data = "_rxdata.csv";
-Ptr<OutputStreamWrapper> log_rx_data;
+NS_LOG_COMPONENT_DEFINE ("SUMO_SIM");
 
 // Global variables
-uint32_t ctr_totRx = 0; 	// Counter for total received packets
-uint32_t ctr_totTx = 0; 	// Counter for total transmitted packets
-uint16_t lenCam;  
-double baseline= 150.0;     // Baseline distance in meter (150m for urban, 320m for freeway)
-
-uint32_t ueVehNum;
-uint32_t infVehNum;
-uint32_t allVehNum;
-
-// Responders users 
-NodeContainer ueVeh;
-NodeContainer infVeh;
-NodeContainer allVeh;
+std::vector<std::pair<uint64_t, uint64_t>> TX_RX {DISLEN, std::pair<uint64_t, uint64_t> {0, 0}};
 
 
-// average AOI
-int64_t last_pkt_time[14][14]  {{0}};
-int64_t last_comm_time[14][14]  {{0}};
-int64_t all_aoi[14][14] = {{0}};
-int64_t all_time[14][14] = {{0}};
-
-const uint32_t ERR_ID = 999;
-
+int64_t start_time {5000};
+int lenCam;
 
 void 
 PrintStatus (uint32_t s_period)
 {
-    if (ctr_totRx > ctr_totTx)
+    for (auto _pair: TX_RX)
     {
-        ctr_totRx = ctr_totTx; 
+        std::cout << "t=" <<  Simulator::Now().GetSeconds();
+        std::cout << "\t Rx/Tx="<< _pair.first << "/" << _pair.second;
+        std::cout << "\t PRR=" << static_cast<double>(_pair.first)/_pair.second << std::endl;
     }
-	// *log_simtime->GetStream() << Simulator::Now ().GetSeconds () << ";" << ctr_totRx << ";" << ctr_totTx << ";" << (double) ctr_totRx / ctr_totTx << std::endl; 
-    std::cout << "t=" <<  Simulator::Now().GetSeconds() << "\t Rx/Tx="<< ctr_totRx << "/" << ctr_totTx << "\t PRR=" << (double) ctr_totRx / ctr_totTx << std::endl;
     Simulator::Schedule(Seconds(s_period), &PrintStatus, s_period);
 }
 
 
 void 
-SidelinkV2xAnnouncementMacTrace_(Ptr<Socket> socket)
-{
-    Ptr<Node> node = socket->GetNode();
-    Ptr<MobilityModel> posMobility = node->GetObject<MobilityModel>();
-    Vector posTx = posMobility->GetPosition();
-
-    CutInMobilityModel::V2V_PACKET pkt = {posTx.x, posTx.y, 0.0, 0.0, ERR_ID, 0};
-    Ptr<Packet> packet = Create<Packet>((uint8_t*)(&pkt), lenCam);
-    socket->Send(packet);
-
-    // check for each UE distance to transmitter
-    int64_t rxTime = Simulator::Now().GetMilliSeconds(); 
-    if (rxTime > 5000)
-    {
-        for (NodeContainer::Iterator nodeIt = allVeh.Begin(); nodeIt != allVeh.End(); nodeIt++)
-        {
-            Ptr<MobilityModel> mob = (*nodeIt)->GetObject<MobilityModel>(); 
-            Vector posRx = mob->GetPosition();
-            
-            double distance = sqrt(pow((posTx.x - posRx.x),2.0)
-                                +pow((posTx.y - posRx.y),2.0));
-            if  ((distance > 0) && (distance <= baseline))
-                ctr_totTx++;
-        }
-    }
-}
-
-
-
-void
 SidelinkV2xAnnouncementMacTrace(Ptr<Socket> socket)
 {
-    Ptr <Node> node = socket->GetNode(); 
-    Ptr<CutInMobilityModel> posMobility = node->GetObject<CutInMobilityModel>();
-    Vector posTx = posMobility->GetPosition();
+    Ptr<Node> node = socket->GetNode();
+    Ptr<SUMOMobilityModel> posMobility = node->GetObject<SUMOMobilityModel>();
+    SUMOMobilityModel::V2X_PACKET v2x_pkt = posMobility->GeneratePacket();
+    Ptr<Packet> pkt = Create<Packet>((uint8_t*)(&v2x_pkt), lenCam);
+    socket->Send(pkt);
 
-    CutInMobilityModel::V2V_PACKET v2v_pkt = posMobility->DoGenerateV2VPacket();
-    Ptr<Packet> packet = Create<Packet>((uint8_t*)(&v2v_pkt), lenCam);
-    socket->Send(packet);
-
-    // check for each UE distance to transmitter
-    int64_t rxTime = Simulator::Now().GetMilliSeconds(); 
-    if (rxTime > 5000)
+    int64_t current_time = Simulator::Now().GetMilliSeconds(); 
+    if (current_time > start_time)
     {
-        for (NodeContainer::Iterator nodeIt = allVeh.Begin(); nodeIt != allVeh.End(); nodeIt++)
+        const std::map<uint32_t, Vector>& allvehpos {SUMOMobilityModel::GetAllVehiclePosition()};
+        double distance;
+        for (auto vehpos : allvehpos)
         {
-            Ptr<MobilityModel> mob = (*nodeIt)->GetObject<MobilityModel>(); 
-            Vector posRx = mob->GetPosition();
+            if (node->GetId() == vehpos.first)
+                continue;
             
-            double distance = sqrt(pow((posTx.x - posRx.x),2.0)
-                                +pow((posTx.y - posRx.y),2.0));
-            if  ((distance > 0) && (distance <= baseline))
-            {
-                ctr_totTx++;
-            }
+            distance = sqrt(pow(v2x_pkt.m_x-vehpos.second.x, 2) + 
+            pow(v2x_pkt.m_y-vehpos.second.y, 2));
+            int DisIndex = static_cast<int>(distance/DISSTEP);
+            DisIndex = (DisIndex <= DISLEN) ? DisIndex : DISLEN;
+
+            std::for_each(TX_RX.begin()+DisIndex, TX_RX.end(), [](std::pair<uint64_t, uint64_t>& tx_rx){tx_rx.second++;});
         }
+            
     }
 }
 
-
-static void 
-ReceivePacket_(Ptr<Socket> socket)
-{
-    // socket->Recv ();
-    Ptr<Node> node = socket->GetNode();
-    int64_t rxTime = Simulator::Now().GetMilliSeconds();    
-
-    Ptr<MobilityModel> posMobility = node->GetObject<MobilityModel>();
-    Vector posRx = posMobility->GetPosition();
-
-    // SendMsg msg;
-    CutInMobilityModel::V2V_PACKET v2v_pkt;
-    Ptr<Packet> packet = socket->Recv (); 
-    packet->CopyData((uint8_t*)&v2v_pkt, sizeof(CutInMobilityModel::V2V_PACKET));
-
-    double distance = sqrt(pow((v2v_pkt.m_x - posRx.x),2.0)+pow((v2v_pkt.m_y - posRx.y), 2.0));
-    if ((distance <= baseline) && (rxTime > 5000))
-        ctr_totRx++; 
-}
 
 static void
 ReceivePacket(Ptr<Socket> socket)
 {   
     Ptr<Node> node = socket->GetNode();
-    uint32_t rxID = node->GetId();
-    int64_t rxTime = Simulator::Now().GetMilliSeconds();
-    Ptr<CutInMobilityModel> posMobility = node->GetObject<CutInMobilityModel>();
+    Ptr<SUMOMobilityModel> posMobility = node->GetObject<SUMOMobilityModel>();
     Vector posRx = posMobility->GetPosition();
 
 
     // SendMsg msg;
-    CutInMobilityModel::V2V_PACKET v2v_pkt;
+    SUMOMobilityModel::V2X_PACKET v2v_pkt;
     Ptr<Packet> packet = socket->Recv (); 
-    packet->CopyData((uint8_t*)&v2v_pkt, sizeof(CutInMobilityModel::V2V_PACKET));
-    uint32_t txID = v2v_pkt.m_id;
-    if (txID != ERR_ID)
-        posMobility->DoPassV2VPacket(v2v_pkt);
+    packet->CopyData((uint8_t*)&v2v_pkt, sizeof(SUMOMobilityModel::V2X_PACKET));
+    posMobility->SavePacket(v2v_pkt);
 
-    double distance = sqrt(pow((v2v_pkt.m_x - posRx.x),2.0)+pow((v2v_pkt.m_y - posRx.y), 2.0));
-    if ((distance <= baseline) && (rxTime > 5000))     
-        ctr_totRx++; 
-    
-    if ((rxTime >= 5000) && (txID != ERR_ID))
+    int64_t current_time = Simulator::Now().GetMilliSeconds(); 
+    if (current_time > start_time)
     {
-        int64_t head = last_comm_time[txID][rxID] - last_pkt_time[txID][rxID];
-        int64_t height = rxTime - last_comm_time[txID][rxID];
-        int64_t bottom = head + height;
-
-        all_aoi[txID][rxID] += (head + bottom) * height / 2;
-        all_time[txID][rxID] += height;
-
-        last_comm_time[txID][rxID] = rxTime;
-        last_pkt_time[txID][rxID] = v2v_pkt.m_time_stamp;
+        double distance = sqrt(pow((v2v_pkt.m_x - posRx.x),2.0)+pow((v2v_pkt.m_y - posRx.y), 2.0));
+        int DisIndex = static_cast<int>(distance/DISSTEP);
+        DisIndex = (DisIndex <= DISLEN) ? DisIndex : DISLEN;
+        std::for_each(TX_RX.begin()+DisIndex, TX_RX.end(), [](std::pair<uint64_t, uint64_t>& tx_rx){
+            tx_rx.first++;
+            tx_rx.first = (tx_rx.first > tx_rx.second) ? tx_rx.second : tx_rx.first;
+            });
     }
 }
 
@@ -184,7 +108,7 @@ main (int argc, char *argv[])
     std::clock_t start, end;
     start = std::clock();
 
-    LogComponentEnable ("v2x_communication_mode_4", LOG_INFO);
+    LogComponentEnable ("SUMO_SIM", LOG_INFO);
 
 
 
@@ -193,9 +117,7 @@ main (int argc, char *argv[])
     // Initialize some values
     // NOTE: commandline parser is currently (05.04.2019) not working for uint8_t (Bug 2916)
     int run = 1;
-    uint16_t simTime = 40;                 // Simulation time in seconds
-    ueVehNum = 0;                  // Number of vehicles
-    infVehNum = 40;
+    uint16_t simTime = 30;                 // Simulation time in seconds
     lenCam = 190;                           // Length of CAM message in bytes [50-300 Bytes]
     double ueTxPower = 23.0;                // Transmission power in dBm
     double probResourceKeep = 0.0;          // Probability to select the previous resource again [0.0-0.8]
@@ -210,15 +132,14 @@ main (int argc, char *argv[])
     uint16_t t1 = 4;                        // T1 value of selection window
     uint16_t t2 = 20;                      // T2 value of selection window
     uint16_t slBandwidth;                   // Sidelink bandwidth
+    uint32_t VehicleNum;
+    NodeContainer VehicleContainer;
 
     // Command line arguments
     CommandLine cmd;
     cmd.AddValue ("time", "Simulation Time", simTime);
     cmd.AddValue ("run", "run value of simulation", run);
-
-    cmd.AddValue ("ueVehNum", "Number of Vehicles", ueVehNum);
-    cmd.AddValue ("infVehNum", "Number of Inf Vehicles", infVehNum);
-
+    cmd.AddValue ("VehicleNum", "Number of Vehicles", VehicleNum);
     cmd.AddValue ("adjacencyPscchPssch", "Scheme for subchannelization", adjacencyPscchPssch); 
     cmd.AddValue ("sizeSubchannel", "Number of RBs per Subchannel", sizeSubchannel);
     cmd.AddValue ("numSubchannel", "Number of Subchannels", numSubchannel);
@@ -229,14 +150,11 @@ main (int argc, char *argv[])
     cmd.AddValue ("mcs", "Modulation and Coding Scheme", mcs);
     cmd.AddValue ("pRsvp", "Resource Reservation Interval", pRsvp); 
     cmd.AddValue ("probResourceKeep", "Probability for selecting previous resource again", probResourceKeep); 
-    cmd.AddValue ("log_rx_data", "name of the rx data logfile", rx_data);
-    cmd.AddValue ("baseline", "Distance in which messages are transmitted and must be received", baseline);
     cmd.Parse (argc, argv);
     RngSeedManager::SetSeed(1);
     RngSeedManager::SetRun(run);
 
 
-    AsciiTraceHelper ascii;
     // rx_data = "./simulation_results/" + std::to_string(level) + "_" + std::to_string(infVeh) + "_" + std::to_string(run) + rx_data;
     // log_rx_data = ascii.CreateFileStream(rx_data);
 
@@ -269,65 +187,19 @@ main (int argc, char *argv[])
     ConfigStore inputConfig; 
     inputConfig.ConfigureDefaults(); 
 
+    // Create Node and install SUMOMobilityModel
     NS_LOG_INFO ("Installing Mobility Model...");
-    std::list<Vector> main_init_pos = CutInMobilityModel::GetInitPosition(CutInMobilityModel::BelongTo::MAIN_ROAD);
-    uint32_t main_veh_num = main_init_pos.size();
-
-    std::list<Vector> merge_init_pos = CutInMobilityModel::GetInitPosition(CutInMobilityModel::BelongTo::MERGE_ROAD);
-    uint32_t merge_veh_num = merge_init_pos.size();
-
-    ueVehNum = main_veh_num + merge_veh_num;
-    allVehNum = ueVehNum + infVehNum;
-
-    ueVeh.Create(ueVehNum);
-    infVeh.Create (infVehNum);
-
-    allVeh.Add(ueVeh);
-    allVeh.Add(infVeh);
-
-    for (uint32_t i = 0; i < ueVehNum; i++)
+    VehicleNum = SUMOMobilityModel::InitSUMOMobilituModel("traffic_files/sim.sumocfg");
+    VehicleContainer.Create(VehicleNum);
+    MobilityHelper SUMOMMH;
+    SUMOMMH.SetMobilityModel("ns3::SUMOMobilityModel");
+    SUMOMMH.Install(VehicleContainer);
+    for (auto nodeptr = VehicleContainer.Begin(); nodeptr != VehicleContainer.End(); nodeptr++)
     {
-        for (uint32_t j = 0; j < ueVehNum; j++)
-        {
-            last_comm_time[i][j] = 5000;
-            last_pkt_time[i][j] = 5000;
-        }
+        auto mmptr {(*nodeptr)->GetObject<SUMOMobilityModel>()};
+        mmptr->BindToSUMO((*nodeptr)->GetId());
     }
-
-    // Install constant random positions 
-    // ue veh
-    Ptr<ListPositionAllocator> LPA = CreateObject<ListPositionAllocator>();
-    MobilityHelper CutInMMH;
-    CutInMMH.SetMobilityModel("ns3::CutInMobilityModel"); 
-    CutInMMH.SetPositionAllocator(LPA);
-
-    for (uint32_t i = 0; i < ueVehNum; i++)
-        LPA->Add(Vector(0.0, 0.0, 0.0));
-    CutInMMH.Install(ueVeh);
-
-    std::list<Vector>::iterator posItr=main_init_pos.begin();
-    for (uint32_t i = 0; i < main_veh_num; i++, posItr++)
-        ueVeh.Get(i)->GetObject<CutInMobilityModel>()->
-        InitAndScheduleToStart(i, 5000, *posItr, CutInMobilityModel::BelongTo::MAIN_ROAD);
-
-    posItr = merge_init_pos.begin();
-    for (uint32_t i = main_veh_num; i < main_veh_num + merge_veh_num; i++, posItr++)
-        ueVeh.Get(i)->GetObject<CutInMobilityModel>()->
-        InitAndScheduleToStart(i, 5000, *posItr, CutInMobilityModel::BelongTo::MERGE_ROAD);
-
-    CutInMobilityModel::InitServer();
-
-    // inf veh
-    Ptr<UniformRandomVariable> RV = CreateObject<UniformRandomVariable> ();
-    MobilityHelper RD2DMMH; 
-
-    Ptr<ns3::RandomRectanglePositionAllocator> RRPLA = CreateObject<RandomRectanglePositionAllocator>();
-    RRPLA->SetAttribute("X", StringValue ("ns3::UniformRandomVariable[Min=-575.0|Max=-175.0]"));
-    RRPLA->SetAttribute("Y", StringValue ("ns3::UniformRandomVariable[Min=-55.0|Max=5.0]"));
-
-    RD2DMMH.SetMobilityModel("ns3::RandomDirection2dMobilityModel", "Bounds", RectangleValue (Rectangle (-575.0, -175.0, -55.0, 5.0)));
-    RD2DMMH.SetPositionAllocator(RRPLA);
-    RD2DMMH.Install(infVeh);
+    SUMOMobilityModel::SUMOMobilityModelSchedule(start_time);
 
 
     NS_LOG_INFO ("Creating helpers...");
@@ -359,18 +231,18 @@ main (int argc, char *argv[])
 
     // Required to use NIST 3GPP model
     BuildingsHelper::Install (eNodeB);
-    BuildingsHelper::Install (allVeh);
+    BuildingsHelper::Install (VehicleContainer);
     BuildingsHelper::MakeMobilityModelConsistent (); 
 
     // Install LTE devices to all UEs 
     NS_LOG_INFO ("Installing UE's network devices...");
     lteHelper->SetAttribute("UseSidelink", BooleanValue (true));
-    NetDeviceContainer allDevs = lteHelper->InstallUeDevice (allVeh);
+    NetDeviceContainer allDevs = lteHelper->InstallUeDevice (VehicleContainer);
 
     // Install the IP stack on the UEs
     NS_LOG_INFO ("Installing IP stack..."); 
     InternetStackHelper internet;
-    internet.Install (allVeh); 
+    internet.Install (VehicleContainer); 
 
     // Assign IP adress to UEs
     NS_LOG_INFO ("Allocating IP addresses and setting up network route...");
@@ -378,11 +250,10 @@ main (int argc, char *argv[])
     ueIpIface = epcHelper->AssignUeIpv4Address (allDevs);
     Ipv4StaticRoutingHelper Ipv4RoutingHelper;
 
-    for(uint32_t u = 0; u < allVeh.GetN(); ++u)
+    for(auto nodeptr = VehicleContainer.Begin(); nodeptr != VehicleContainer.End(); nodeptr++)
     {
-        Ptr<Node> ueNode = allVeh.Get(u);
         // Set the default gateway for the UE
-        Ptr<Ipv4StaticRouting> ueStaticRouting = Ipv4RoutingHelper.GetStaticRouting(ueNode->GetObject<Ipv4>());
+        Ptr<Ipv4StaticRouting> ueStaticRouting = Ipv4RoutingHelper.GetStaticRouting((*nodeptr)->GetObject<Ipv4>());
         ueStaticRouting->SetDefaultRoute (epcHelper->GetUeDefaultGatewayAddress(), 1);
     }
 
@@ -392,7 +263,7 @@ main (int argc, char *argv[])
 
     NS_LOG_INFO ("Creating sidelink groups...");
     std::vector<NetDeviceContainer> txGroups;
-    txGroups = lteV2xHelper->AssociateForV2xBroadcast(allDevs, allVehNum); 
+    txGroups = lteV2xHelper->AssociateForV2xBroadcast(allDevs, VehicleNum); 
     lteV2xHelper->PrintGroups(txGroups); 
 
     NS_LOG_INFO ("Installing applications...");
@@ -408,8 +279,6 @@ main (int argc, char *argv[])
         NetDeviceContainer txUe ((*gIt).Get(0));
         NetDeviceContainer rxUes = lteV2xHelper->RemoveNetDevice ((*gIt), txUe.Get (0));
 
-        uint32_t vehID = txUe.Get(0)->GetNode()->GetId();
-
         Ptr<LteSlTft> tft = Create<LteSlTft> (LteSlTft::TRANSMIT, clientRespondersAddress, groupL2Address);
         lteV2xHelper->ActivateSidelinkBearer (Seconds(0.0), txUe, tft);
         tft = Create<LteSlTft> (LteSlTft::RECEIVE, clientRespondersAddress, groupL2Address);
@@ -422,20 +291,13 @@ main (int argc, char *argv[])
         host->SetAllowBroadcast(true);
         host->ShutdownRecv();
 
-
-
         Ptr<LteUeMac> ueMac = DynamicCast<LteUeMac>( txUe.Get (0)->GetObject<LteUeNetDevice> ()->GetMac () );
-        if (vehID < ueVehNum)
-            ueMac->TraceConnectWithoutContext ("SidelinkV2xAnnouncement", MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace, host));
-        else
-            ueMac->TraceConnectWithoutContext ("SidelinkV2xAnnouncement", MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace_, host));
+        ueMac->TraceConnectWithoutContext ("SidelinkV2xAnnouncement", MakeBoundCallback (&SidelinkV2xAnnouncementMacTrace, host));
+
 
         Ptr<Socket> sink = Socket::CreateSocket(txUe.Get(0)->GetNode(),TypeId::LookupByName ("ns3::UdpSocketFactory"));
         sink->Bind(InetSocketAddress (Ipv4Address::GetAny (), application_port));
-        if (vehID < ueVehNum)
-            sink->SetRecvCallback (MakeCallback (&ReceivePacket));
-        else
-            sink->SetRecvCallback (MakeCallback (&ReceivePacket_));
+        sink->SetRecvCallback (MakeCallback (&ReceivePacket));
 
         //store and increment addresses
         groupL2Addresses.push_back (groupL2Address);
@@ -493,32 +355,18 @@ main (int argc, char *argv[])
         end = std::clock();
         std::cout << (double)(end - start) / CLOCKS_PER_SEC << std::endl;
 
-
-        std::string average_pos_err = "./simulation_results/" + std::to_string(infVehNum) + "_" + std::to_string(run) + "_position_error";
+        std::string average_pos_err = "./simulation_results/standard_protocol_" + std::to_string(VehicleNum) + "_results";
+        AsciiTraceHelper ascii;
         Ptr<ns3::OutputStreamWrapper> position_error = ascii.CreateFileStream(average_pos_err);
+        SUMOMobilityModel::SaveResults(position_error);
 
-        std::string average_AoI_over = "./simulation_results/" + std::to_string(infVehNum) + "_" + std::to_string(run) + "_AoI_over";
-        Ptr<ns3::OutputStreamWrapper> AoI_over = ascii.CreateFileStream(average_AoI_over);
+        *position_error -> GetStream() << "------------------------------ \n";
+        *position_error -> GetStream() << "PDR: " << std::endl;
+        *position_error -> GetStream() << "------------------------------ \n";
+        std::for_each(TX_RX.begin(), TX_RX.end(), [&](std::pair<int64_t, int64_t> TRpair){
+            *position_error->GetStream() << TRpair.first / static_cast<double>(TRpair.second) << std::endl;
+        });
 
-        CutInMobilityModel::PrintAoIOverRate(AoI_over);
-        CutInMobilityModel::PrintPositionErrorRate(position_error);
-
-        double temp_ave_aoi = 0.0;
-        double ave_aoi_num = 0.0;
-        for (uint32_t i = 0; i < ueVehNum; i++)
-        {
-            for (uint32_t j = 0; j < ueVehNum; j++)
-            {
-                if (all_aoi[i][j] != 0)
-                {
-                    temp_ave_aoi += ((double)all_aoi[i][j]) / ((double)all_time[i][j]);
-                    ave_aoi_num += 1;
-                }
-            }
-        }
-
-        *AoI_over->GetStream() << "Average AOI = " << temp_ave_aoi/ave_aoi_num << std::endl;
-        std::cout << ave_aoi_num << std::endl;
-
+        SUMOMobilityModel::CloseSUMO();
         return 0;  
 }   

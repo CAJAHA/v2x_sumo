@@ -40,4 +40,5 @@ TAGS
 build-dir/
 build/
 /.cproject
+/CHANGES.html
 /.project
