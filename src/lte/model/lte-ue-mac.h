@@ -515,7 +515,7 @@ private:
     uint8_t m_sfGap;
     uint8_t m_mcs;
     uint8_t m_reTxIdx;
-    
+
     uint8_t m_resPscch; 
     uint32_t m_tbSize; 
   };
@@ -554,9 +554,13 @@ private:
     uint16_t m_pRsvpRx; 
     double m_slRsrp;
     double m_slRssi; 
+    bool m_valid;
   };
 
-  std::list<SensingData> m_sensingData; 
+  // std::list<SensingData> m_sensingData; 
+
+  SensingData m_sensingData[1000][3]; // 1000*3
+  int m_t, m_sc;
 
   struct CandidateResource{
     SidelinkCommResourcePoolV2x::SidelinkTransmissionInfo m_txInfo; 
