@@ -7,4 +7,4 @@ This project was developed on [ns-3_c-v2x](https://github.com/FabianEckermann/ns
 * compile SUMO from source
 * clone this project
 * ./configure and ./waf build
-* the example in scratch/
+* run the example in scratch/sumo_sim/ by execute "./waf run scratch/sumo_sim"
